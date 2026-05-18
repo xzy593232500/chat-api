@@ -26,6 +26,7 @@ export const useNavigation = (t, docsLink, headerNavModules) => {
       home: true,
       console: true,
       pricing: true,
+      gptImage: true,
       docs: true,
       about: true,
     };
@@ -48,6 +49,12 @@ export const useNavigation = (t, docsLink, headerNavModules) => {
         text: t('模型广场'),
         itemKey: 'pricing',
         to: '/pricing',
+      },
+      {
+        text: t('GPT 图像'),
+        itemKey: 'gptImage',
+        isExternal: true,
+        externalLink: 'http://192.241.174.137:8080',
       },
       ...(docsLink
         ? [
@@ -77,7 +84,7 @@ export const useNavigation = (t, docsLink, headerNavModules) => {
           ? modules.pricing.enabled
           : modules.pricing;
       }
-      return modules[link.itemKey] === true;
+      return modules[link.itemKey] !== false;
     });
   }, [t, docsLink, headerNavModules]);
 

@@ -38,6 +38,7 @@ export type TopNavLink = {
  *   console: true,
  *   pricing: { enabled: true, requireAuth: false },
  *   rankings: { enabled: true, requireAuth: false },
+ *   gptImage: true,
  *   docs: true,
  *   about: true
  * }
@@ -76,6 +77,15 @@ export function useTopNavLinks(): TopNavLink[] {
   if (pricing && typeof pricing === 'object' && pricing.enabled) {
     const requiresAuth = pricing.requireAuth && !isAuthed
     links.push({ title: t('Model Square'), href: '/pricing', requiresAuth })
+  }
+
+  // GPT Image Playground
+  if (modules?.gptImage !== false) {
+    links.push({
+      title: 'GPT 图像',
+      href: 'http://192.241.174.137:8080',
+      external: true,
+    })
   }
 
   // Rankings
