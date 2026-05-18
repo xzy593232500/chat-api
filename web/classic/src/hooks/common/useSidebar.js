@@ -42,6 +42,8 @@ export const DEFAULT_ADMIN_CONFIG = {
   personal: {
     enabled: true,
     topup: true,
+    topupBills: true,
+    invoices: true,
     personal: true,
   },
   admin: {

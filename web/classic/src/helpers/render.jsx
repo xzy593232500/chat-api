@@ -80,6 +80,8 @@ import {
   Package,
   Server,
   CalendarClock,
+  ReceiptText,
+  FileText,
 } from 'lucide-react';
 import {
   SiAtlassian,
@@ -137,6 +139,10 @@ export function getLucideIcon(key, selected = false) {
       return <CheckSquare {...commonProps} color={iconColor} />;
     case 'topup':
       return <CreditCard {...commonProps} color={iconColor} />;
+    case 'topupBills':
+      return <ReceiptText {...commonProps} color={iconColor} />;
+    case 'invoices':
+      return <FileText {...commonProps} color={iconColor} />;
     case 'channel':
       return <Layers {...commonProps} color={iconColor} />;
     case 'redemption':

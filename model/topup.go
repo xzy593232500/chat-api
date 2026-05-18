@@ -22,6 +22,7 @@ type TopUp struct {
 	CreateTime      int64   `json:"create_time"`
 	CompleteTime    int64   `json:"complete_time"`
 	Status          string  `json:"status"`
+	InvoiceStatus   string  `json:"invoice_status,omitempty" gorm:"-"`
 }
 
 const (

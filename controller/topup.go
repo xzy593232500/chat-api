@@ -455,6 +455,10 @@ func GetUserTopUps(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	if err = model.AttachInvoiceStatusToTopUps(userId, topups); err != nil {
+		common.ApiError(c, err)
+		return
+	}
 
 	pageInfo.SetTotal(int(total))
 	pageInfo.SetItems(topups)
