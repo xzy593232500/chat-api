@@ -36,6 +36,8 @@ import UserSubscriptionsModal from './modals/UserSubscriptionsModal';
 const UsersTable = (usersData) => {
   const {
     users,
+    selectedUserIds,
+    setSelectedUserIds,
     loading,
     activePage,
     pageSize,
@@ -141,9 +143,15 @@ const UsersTable = (usersData) => {
       showResetPasskeyModal: showResetPasskeyUserModal,
       showResetTwoFAModal: showResetTwoFAUserModal,
       showUserSubscriptionsModal: showUserSubscriptionsUserModal,
+      users,
+      selectedUserIds,
+      setSelectedUserIds,
     });
   }, [
     t,
+    users,
+    selectedUserIds,
+    setSelectedUserIds,
     setEditingUser,
     setShowEditUser,
     showPromoteUserModal,

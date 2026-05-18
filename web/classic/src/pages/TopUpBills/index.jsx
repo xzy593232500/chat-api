@@ -33,12 +33,17 @@ const labels = {
   quota: '\u5145\u503c\u989d\u5ea6',
   paidAmount: '\u652f\u4ed8\u91d1\u989d',
   status: '\u72b6\u6001',
+  invoiceState: '\u5f00\u7968\u72b6\u6001',
   createdAt: '\u521b\u5efa\u65f6\u95f4',
   success: '\u6210\u529f',
   pending: '\u5f85\u652f\u4ed8',
   failed: '\u5931\u8d25',
   expired: '\u5df2\u8fc7\u671f',
   applied: '\u5df2\u7533\u8bf7',
+  invoiceable: '\u53ef\u7533\u8bf7',
+  notInvoiceable: '\u4e0d\u53ef\u7533\u8bf7',
+  invoicePending: '\u5f85\u5f00\u7968',
+  invoiceIssued: '\u5df2\u5f00\u7968',
   invoiceTitle: '\u7533\u8bf7\u5f00\u7968',
   chooseBill: '1. \u9009\u62e9\u53ef\u5f00\u7968\u8d26\u5355\uff08\u4ec5\u663e\u793a\u6210\u529f\u4e14\u672a\u5f00\u8fc7\u53d1\u7968\u7684\u5145\u503c\u8bb0\u5f55\uff09',
   fillTitle: '2. \u586b\u5199\u53d1\u7968\u62ac\u5934',
@@ -91,6 +96,19 @@ function statusBadge(status) {
       <span>{config.text}</span>
     </span>
   );
+}
+
+function invoiceStatusBadge(record) {
+  if (record.status !== 'success') {
+    return <Text type='tertiary'>{labels.notInvoiceable}</Text>;
+  }
+  if (record.invoice_status === 'pending') {
+    return <Text style={{ color: '#d97706', fontWeight: 600 }}>{labels.invoicePending}</Text>;
+  }
+  if (record.invoice_status === 'issued' || record.invoice_status === 'approved') {
+    return <Text style={{ color: '#16a34a', fontWeight: 600 }}>{labels.invoiceIssued}</Text>;
+  }
+  return <Text style={{ color: '#16a34a', fontWeight: 600 }}>{labels.invoiceable}</Text>;
 }
 
 function TopUpBills() {
@@ -246,6 +264,7 @@ function TopUpBills() {
     },
     { title: labels.paidAmount, dataIndex: 'money', render: (value) => <Text type='danger'>{money(value)}</Text> },
     { title: labels.status, dataIndex: 'status', render: statusBadge },
+    { title: labels.invoiceState, dataIndex: 'invoice_status', render: (_, record) => invoiceStatusBadge(record) },
     { title: labels.createdAt, dataIndex: 'create_time', render: timestamp2string },
   ];
 

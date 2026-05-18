@@ -18,18 +18,38 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
-import { Button } from '@douyinfe/semi-ui';
+import { Button, Modal } from '@douyinfe/semi-ui';
 
-const UsersActions = ({ setShowAddUser, t }) => {
+const UsersActions = ({ setShowAddUser, selectedUserIds = [], batchDeleteUsers, loading, t }) => {
   // Add new user
   const handleAddUser = () => {
     setShowAddUser(true);
+  };
+
+  const handleBatchDelete = () => {
+    Modal.confirm({
+      title: t('确定要批量注销选中的用户吗？'),
+      content: t('剩余额度为 0 的用户会从数据库中删除；仍有余额的用户会保留为已注销状态，可稍后恢复。'),
+      type: 'danger',
+      onOk: batchDeleteUsers,
+    });
   };
 
   return (
     <div className='flex gap-2 w-full md:w-auto order-2 md:order-1'>
       <Button className='w-full md:w-auto' onClick={handleAddUser} size='small'>
         {t('添加用户')}
+      </Button>
+      <Button
+        className='w-full md:w-auto'
+        type='danger'
+        theme='light'
+        size='small'
+        disabled={selectedUserIds.length === 0}
+        loading={loading}
+        onClick={handleBatchDelete}
+      >
+        {t('批量注销')}{selectedUserIds.length > 0 ? ` (${selectedUserIds.length})` : ''}
       </Button>
     </div>
   );

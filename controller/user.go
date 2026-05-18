@@ -768,9 +768,14 @@ func DeleteUser(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	originUser, err := model.GetUserById(id, false)
-	if err != nil {
-		common.ApiError(c, err)
+	originUser := model.User{Id: id}
+	model.DB.Unscoped().Where(&originUser).First(&originUser)
+	if originUser.Id == 0 {
+		common.ApiErrorI18n(c, i18n.MsgUserNotExists)
+		return
+	}
+	if originUser.Role == common.RoleRootUser {
+		common.ApiErrorI18n(c, i18n.MsgUserCannotDeleteRootUser)
 		return
 	}
 	myRole := c.GetInt("role")
@@ -778,14 +783,16 @@ func DeleteUser(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserNoPermissionHigherLevel)
 		return
 	}
-	err = model.HardDeleteUserById(id)
+	hardDeleted, err := model.DeleteUserByIdByQuota(id)
 	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-			"message": "",
-		})
+		common.ApiError(c, err)
 		return
 	}
+	common.ApiSuccess(c, gin.H{
+		"id":           id,
+		"deleted":      true,
+		"hard_deleted": hardDeleted,
+	})
 }
 
 func DeleteSelf(c *gin.Context) {
@@ -797,12 +804,7 @@ func DeleteSelf(c *gin.Context) {
 		return
 	}
 
-	var err error
-	if user.Quota <= 0 {
-		err = model.HardDeleteUserById(id)
-	} else {
-		err = model.DeleteUserById(id)
-	}
+	_, err := model.DeleteUserByIdByQuota(id)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -860,6 +862,78 @@ type ManageRequest struct {
 	Mode   string `json:"mode"`
 }
 
+type BatchDeleteUsersRequest struct {
+	Ids []int `json:"ids"`
+}
+
+func BatchDeleteUsers(c *gin.Context) {
+	var req BatchDeleteUsersRequest
+	if err := json.NewDecoder(c.Request.Body).Decode(&req); err != nil || len(req.Ids) == 0 {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+
+	seen := make(map[int]struct{}, len(req.Ids))
+	ids := make([]int, 0, len(req.Ids))
+	for _, id := range req.Ids {
+		if id <= 0 {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
+
+	myRole := c.GetInt("role")
+	users := make([]model.User, 0, len(ids))
+	if err := model.DB.Unscoped().Where("id IN ?", ids).Find(&users).Error; err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	if len(users) == 0 {
+		common.ApiErrorI18n(c, i18n.MsgUserNotExists)
+		return
+	}
+
+	for _, user := range users {
+		if user.Role == common.RoleRootUser {
+			common.ApiErrorI18n(c, i18n.MsgUserCannotDeleteRootUser)
+			return
+		}
+		if myRole <= user.Role && myRole != common.RoleRootUser {
+			common.ApiErrorI18n(c, i18n.MsgUserNoPermissionHigherLevel)
+			return
+		}
+	}
+
+	hardDeletedCount := 0
+	softDeletedCount := 0
+	for _, user := range users {
+		hardDeleted, err := model.DeleteUserByIdByQuota(user.Id)
+		if err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		if hardDeleted {
+			hardDeletedCount++
+		} else {
+			softDeletedCount++
+		}
+	}
+
+	common.ApiSuccess(c, gin.H{
+		"total":        len(users),
+		"hard_deleted": hardDeletedCount,
+		"soft_deleted": softDeletedCount,
+	})
+}
+
 // ManageUser Only admin user can do this
 func ManageUser(c *gin.Context) {
 	var req ManageRequest
@@ -897,18 +971,32 @@ func ManageUser(c *gin.Context) {
 			common.ApiErrorI18n(c, i18n.MsgUserCannotDeleteRootUser)
 			return
 		}
-		if err := user.Delete(); err != nil {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": err.Error(),
-			})
+		hardDeleted, err := model.DeleteUserByIdByQuota(user.Id)
+		if err != nil {
+			common.ApiError(c, err)
 			return
 		}
-		// 删除用户后，强制清理 Redis 中所有该用户令牌的缓存，
-		// 避免已缓存的令牌在 TTL 过期前仍能通过 TokenAuth 校验。
-		if err := model.InvalidateUserTokensCache(user.Id); err != nil {
-			common.SysLog(fmt.Sprintf("failed to invalidate tokens cache for user %d: %s", user.Id, err.Error()))
+		common.ApiSuccess(c, gin.H{
+			"id":           user.Id,
+			"deleted":      true,
+			"hard_deleted": hardDeleted,
+			"status":       user.Status,
+			"role":         user.Role,
+		})
+		return
+	case "restore":
+		if err := model.RestoreUserById(user.Id); err != nil {
+			common.ApiError(c, err)
+			return
 		}
+		user.Status = common.UserStatusEnabled
+		common.ApiSuccess(c, gin.H{
+			"id":       user.Id,
+			"restored": true,
+			"status":   user.Status,
+			"role":     user.Role,
+		})
+		return
 	case "promote":
 		if myRole != common.RoleRootUser {
 			common.ApiErrorI18n(c, i18n.MsgUserAdminCannotPromote)

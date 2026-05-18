@@ -333,6 +333,46 @@ func DeleteUserById(id int) (err error) {
 	return user.Delete()
 }
 
+func DeleteUserByIdByQuota(id int) (hardDeleted bool, err error) {
+	if id == 0 {
+		return false, errors.New("id is empty")
+	}
+
+	var user User
+	if err = DB.Unscoped().Where("id = ?", id).First(&user).Error; err != nil {
+		return false, err
+	}
+	if user.Quota <= 0 {
+		return true, HardDeleteUserById(id)
+	}
+	if err = user.Delete(); err != nil {
+		return false, err
+	}
+	if err = InvalidateUserTokensCache(id); err != nil {
+		common.SysLog(fmt.Sprintf("failed to invalidate tokens cache for deleted user %d: %s", id, err.Error()))
+	}
+	return false, nil
+}
+
+func RestoreUserById(id int) error {
+	if id == 0 {
+		return errors.New("id is empty")
+	}
+	if err := DB.Unscoped().Model(&User{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"deleted_at": nil,
+		"status":     common.UserStatusEnabled,
+	}).Error; err != nil {
+		return err
+	}
+	if err := invalidateUserCache(id); err != nil {
+		common.SysLog(fmt.Sprintf("failed to invalidate user cache for restored user %d: %s", id, err.Error()))
+	}
+	if err := InvalidateUserTokensCache(id); err != nil {
+		common.SysLog(fmt.Sprintf("failed to invalidate tokens cache for restored user %d: %s", id, err.Error()))
+	}
+	return nil
+}
+
 func HardDeleteUserById(id int) error {
 	if id == 0 {
 		return errors.New("id 为空！")

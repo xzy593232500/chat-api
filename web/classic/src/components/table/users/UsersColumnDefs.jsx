@@ -27,6 +27,7 @@ import {
   Popover,
   Typography,
   Dropdown,
+  Checkbox,
 } from '@douyinfe/semi-ui';
 import { IconMore } from '@douyinfe/semi-icons';
 import {
@@ -220,7 +221,11 @@ const renderOperations = (
   },
 ) => {
   if (record.DeletedAt !== null) {
-    return <></>;
+    return (
+      <Button size='small' type='primary' theme='light' onClick={() => showEnableDisableModal(record, 'restore')}>
+        {t('恢复')}
+      </Button>
+    );
   }
 
   const moreMenu = [
@@ -307,6 +312,9 @@ const renderOperations = (
  */
 export const getUsersColumns = ({
   t,
+  users = [],
+  selectedUserIds = [],
+  setSelectedUserIds,
   setEditingUser,
   setShowEditUser,
   showPromoteModal,
@@ -317,7 +325,54 @@ export const getUsersColumns = ({
   showResetTwoFAModal,
   showUserSubscriptionsModal,
 }) => {
+  const selectableIds = users
+    .filter((user) => user.DeletedAt === null && user.role !== 100)
+    .map((user) => user.id);
+  const allSelected =
+    selectableIds.length > 0 &&
+    selectableIds.every((id) => selectedUserIds.includes(id));
+  const partlySelected =
+    selectableIds.some((id) => selectedUserIds.includes(id)) && !allSelected;
+  const togglePageSelection = () => {
+    if (!setSelectedUserIds) return;
+    setSelectedUserIds((prev) => {
+      if (allSelected) {
+        return prev.filter((id) => !selectableIds.includes(id));
+      }
+      return Array.from(new Set([...prev, ...selectableIds]));
+    });
+  };
+
   return [
+    {
+      title: (
+        <Checkbox
+          checked={allSelected}
+          indeterminate={partlySelected}
+          disabled={selectableIds.length === 0}
+          onChange={togglePageSelection}
+        />
+      ),
+      dataIndex: 'select',
+      width: 52,
+      render: (text, record) => {
+        const disabled = record.DeletedAt !== null || record.role === 100;
+        return (
+          <Checkbox
+            checked={selectedUserIds.includes(record.id)}
+            disabled={disabled}
+            onChange={() => {
+              if (!setSelectedUserIds || disabled) return;
+              setSelectedUserIds((prev) =>
+                prev.includes(record.id)
+                  ? prev.filter((id) => id !== record.id)
+                  : [...prev, record.id],
+              );
+            }}
+          />
+        );
+      },
+    },
     {
       title: 'ID',
       dataIndex: 'id',

@@ -21,6 +21,15 @@ const (
 	DefaultInvoiceContent  = "“信息技术服务”技术服务费"
 )
 
+func InvoiceStatusBlocksTopUp(status string) bool {
+	switch status {
+	case InvoiceStatusPending, InvoiceStatusIssued, InvoiceStatusApproved:
+		return true
+	default:
+		return false
+	}
+}
+
 type TopUpInvoice struct {
 	Id              int     `json:"id"`
 	UserId          int     `json:"user_id" gorm:"index"`
@@ -172,6 +181,9 @@ func AttachInvoiceStatusToTopUps(userId int, topups []*TopUp) error {
 		return err
 	}
 	for _, invoice := range invoices {
+		if !InvoiceStatusBlocksTopUp(invoice.Status) {
+			continue
+		}
 		for _, topUpId := range parseInvoiceTopUpIds(invoice.TopUpIds) {
 			if topup, ok := topupById[topUpId]; ok {
 				topup.InvoiceStatus = invoice.Status
@@ -221,7 +233,11 @@ func CreateTopUpInvoice(userId int, topUpIds []int, companyName, taxNo, content,
 		for _, id := range ids {
 			var duplicateCount int64
 			if err := tx.Model(&TopUpInvoice{}).
-				Where("user_id = ? AND top_up_ids LIKE ?", userId, fmt.Sprintf("%%,%d,%%", id)).
+				Where("user_id = ? AND top_up_ids LIKE ? AND status IN ?", userId, fmt.Sprintf("%%,%d,%%", id), []string{
+					InvoiceStatusPending,
+					InvoiceStatusIssued,
+					InvoiceStatusApproved,
+				}).
 				Count(&duplicateCount).Error; err != nil {
 				return err
 			}

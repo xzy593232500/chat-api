@@ -35,6 +35,7 @@ export const useUsersData = () => {
   const [searching, setSearching] = useState(false);
   const [groupOptions, setGroupOptions] = useState([]);
   const [userCount, setUserCount] = useState(0);
+  const [selectedUserIds, setSelectedUserIds] = useState([]);
 
   // Modal states
   const [showAddUser, setShowAddUser] = useState(false);
@@ -139,19 +140,51 @@ export const useUsersData = () => {
       const newUsers = users.map((u) => {
         if (u.id === userId) {
           if (action === 'delete') {
-            return { ...u, DeletedAt: new Date() };
+            return res.data.data?.hard_deleted ? null : { ...u, DeletedAt: new Date() };
+          }
+          if (action === 'restore') {
+            return { ...u, DeletedAt: null, status: user.status, role: user.role };
           }
           return { ...u, status: user.status, role: user.role };
         }
         return u;
-      });
+      }).filter(Boolean);
 
       setUsers(newUsers);
+      setSelectedUserIds((prev) => prev.filter((id) => id !== userId));
     } else {
       showError(message);
     }
 
     setLoading(false);
+  };
+
+  const batchDeleteUsers = async () => {
+    if (selectedUserIds.length === 0) {
+      showError(t('请先选择用户'));
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await API.post('/api/user/batch_delete', {
+        ids: selectedUserIds,
+      });
+      const { success, message, data } = res.data;
+      if (success) {
+        showSuccess(
+          t('批量注销完成') +
+            `：${t('彻底删除')} ${data?.hard_deleted || 0}，${t('已注销')} ${data?.soft_deleted || 0}`,
+        );
+        setSelectedUserIds([]);
+        await refresh();
+      } else {
+        showError(message);
+      }
+    } catch (error) {
+      showError(t('操作失败，请重试'));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const resetUserPasskey = async (user) => {
@@ -277,6 +310,8 @@ export const useUsersData = () => {
   return {
     // Data state
     users,
+    selectedUserIds,
+    setSelectedUserIds,
     loading,
     activePage,
     pageSize,
@@ -305,6 +340,7 @@ export const useUsersData = () => {
     loadUsers,
     searchUsers,
     manageUser,
+    batchDeleteUsers,
     resetUserPasskey,
     resetUserTwoFA,
     handlePageChange,
