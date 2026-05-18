@@ -44,7 +44,37 @@ var (
 	ErrPaymentMethodMismatch = errors.New("payment method mismatch")
 	ErrTopUpNotFound         = errors.New("topup not found")
 	ErrTopUpStatusInvalid    = errors.New("topup status invalid")
+	ErrTopUpExpired          = errors.New("topup expired")
 )
+
+const TopUpExpireSeconds int64 = 15 * 60
+
+func IsTopUpExpired(topUp *TopUp, now int64) bool {
+	return topUp != nil &&
+		topUp.Status == common.TopUpStatusPending &&
+		topUp.CreateTime > 0 &&
+		now-topUp.CreateTime >= TopUpExpireSeconds
+}
+
+func expireTopUpTx(tx *gorm.DB, topUp *TopUp, now int64) error {
+	if !IsTopUpExpired(topUp, now) {
+		return nil
+	}
+	topUp.Status = common.TopUpStatusExpired
+	topUp.CompleteTime = now
+	return tx.Save(topUp).Error
+}
+
+func ExpireOverduePendingTopUps() error {
+	now := common.GetTimestamp()
+	cutoff := now - TopUpExpireSeconds
+	return DB.Model(&TopUp{}).
+		Where("status = ? AND create_time > 0 AND create_time <= ?", common.TopUpStatusPending, cutoff).
+		Updates(map[string]interface{}{
+			"status":        common.TopUpStatusExpired,
+			"complete_time": now,
+		}).Error
+}
 
 func (topUp *TopUp) Insert() error {
 	var err error
@@ -99,8 +129,18 @@ func UpdatePendingTopUpStatus(tradeNo string, expectedPaymentProvider string, ta
 		if topUp.Status != common.TopUpStatusPending {
 			return ErrTopUpStatusInvalid
 		}
+		now := common.GetTimestamp()
+		if targetStatus != common.TopUpStatusExpired && IsTopUpExpired(topUp, now) {
+			if err := expireTopUpTx(tx, topUp, now); err != nil {
+				return err
+			}
+			return ErrTopUpExpired
+		}
 
 		topUp.Status = targetStatus
+		if targetStatus == common.TopUpStatusExpired {
+			topUp.CompleteTime = now
+		}
 		return tx.Save(topUp).Error
 	})
 }
@@ -132,7 +172,15 @@ func Recharge(referenceId string, customerId string, callerIp string) (err error
 			return errors.New("充值订单状态错误")
 		}
 
-		topUp.CompleteTime = common.GetTimestamp()
+		now := common.GetTimestamp()
+		if IsTopUpExpired(topUp, now) {
+			if err := expireTopUpTx(tx, topUp, now); err != nil {
+				return err
+			}
+			return ErrTopUpExpired
+		}
+
+		topUp.CompleteTime = now
 		topUp.Status = common.TopUpStatusSuccess
 		err = tx.Save(topUp).Error
 		if err != nil {
@@ -167,6 +215,10 @@ func topUpQueryCutoff() int64 {
 }
 
 func GetUserTopUps(userId int, pageInfo *common.PageInfo) (topups []*TopUp, total int64, err error) {
+	if err := ExpireOverduePendingTopUps(); err != nil {
+		return nil, 0, err
+	}
+
 	// Start transaction
 	tx := DB.Begin()
 	if tx.Error != nil {
@@ -202,8 +254,53 @@ func GetUserTopUps(userId int, pageInfo *common.PageInfo) (topups []*TopUp, tota
 	return topups, total, nil
 }
 
+func GetUserInvoiceableTopUps(userId int, keyword string, pageInfo *common.PageInfo) (topups []*TopUp, total int64, err error) {
+	if err := ExpireOverduePendingTopUps(); err != nil {
+		return nil, 0, err
+	}
+
+	query := DB.Where("user_id = ? AND status = ? AND create_time >= ?", userId, common.TopUpStatusSuccess, topUpQueryCutoff())
+	if keyword != "" {
+		pattern, perr := sanitizeLikePattern(keyword)
+		if perr != nil {
+			return nil, 0, perr
+		}
+		query = query.Where("trade_no LIKE ? ESCAPE '!'", pattern)
+	}
+
+	var all []*TopUp
+	if err := query.Order("id desc").Limit(searchTopUpCountHardLimit).Find(&all).Error; err != nil {
+		return nil, 0, err
+	}
+	if err := AttachInvoiceStatusToTopUps(userId, all); err != nil {
+		return nil, 0, err
+	}
+
+	invoiceable := make([]*TopUp, 0, len(all))
+	for _, topUp := range all {
+		if topUp.Status == common.TopUpStatusSuccess && topUp.InvoiceStatus == "" {
+			invoiceable = append(invoiceable, topUp)
+		}
+	}
+
+	total = int64(len(invoiceable))
+	start := pageInfo.GetStartIdx()
+	if start >= len(invoiceable) {
+		return []*TopUp{}, total, nil
+	}
+	end := pageInfo.GetEndIdx()
+	if end > len(invoiceable) {
+		end = len(invoiceable)
+	}
+	return invoiceable[start:end], total, nil
+}
+
 // GetAllTopUps 获取全平台的充值记录（管理员使用，不限制时间窗口）
 func GetAllTopUps(pageInfo *common.PageInfo) (topups []*TopUp, total int64, err error) {
+	if err := ExpireOverduePendingTopUps(); err != nil {
+		return nil, 0, err
+	}
+
 	tx := DB.Begin()
 	if tx.Error != nil {
 		return nil, 0, tx.Error
@@ -237,6 +334,10 @@ const searchTopUpCountHardLimit = 10000
 
 // SearchUserTopUps 按订单号搜索某用户的充值记录
 func SearchUserTopUps(userId int, keyword string, pageInfo *common.PageInfo) (topups []*TopUp, total int64, err error) {
+	if err := ExpireOverduePendingTopUps(); err != nil {
+		return nil, 0, err
+	}
+
 	tx := DB.Begin()
 	if tx.Error != nil {
 		return nil, 0, tx.Error
@@ -277,6 +378,10 @@ func SearchUserTopUps(userId int, keyword string, pageInfo *common.PageInfo) (to
 
 // SearchAllTopUps 按订单号搜索全平台充值记录（管理员使用，不限制时间窗口）
 func SearchAllTopUps(keyword string, pageInfo *common.PageInfo) (topups []*TopUp, total int64, err error) {
+	if err := ExpireOverduePendingTopUps(); err != nil {
+		return nil, 0, err
+	}
+
 	tx := DB.Begin()
 	if tx.Error != nil {
 		return nil, 0, tx.Error
@@ -363,7 +468,15 @@ func ManualCompleteTopUp(tradeNo string, callerIp string) error {
 		}
 
 		// 标记完成
-		topUp.CompleteTime = common.GetTimestamp()
+		now := common.GetTimestamp()
+		if IsTopUpExpired(topUp, now) {
+			if err := expireTopUpTx(tx, topUp, now); err != nil {
+				return err
+			}
+			return ErrTopUpExpired
+		}
+
+		topUp.CompleteTime = now
 		topUp.Status = common.TopUpStatusSuccess
 		if err := tx.Save(topUp).Error; err != nil {
 			return err
@@ -415,7 +528,15 @@ func RechargeCreem(referenceId string, customerEmail string, customerName string
 			return errors.New("充值订单状态错误")
 		}
 
-		topUp.CompleteTime = common.GetTimestamp()
+		now := common.GetTimestamp()
+		if IsTopUpExpired(topUp, now) {
+			if err := expireTopUpTx(tx, topUp, now); err != nil {
+				return err
+			}
+			return ErrTopUpExpired
+		}
+
+		topUp.CompleteTime = now
 		topUp.Status = common.TopUpStatusSuccess
 		err = tx.Save(topUp).Error
 		if err != nil {
@@ -501,7 +622,15 @@ func RechargeWaffo(tradeNo string, callerIp string) (err error) {
 			return errors.New("无效的充值额度")
 		}
 
-		topUp.CompleteTime = common.GetTimestamp()
+		now := common.GetTimestamp()
+		if IsTopUpExpired(topUp, now) {
+			if err := expireTopUpTx(tx, topUp, now); err != nil {
+				return err
+			}
+			return ErrTopUpExpired
+		}
+
+		topUp.CompleteTime = now
 		topUp.Status = common.TopUpStatusSuccess
 		if err := tx.Save(topUp).Error; err != nil {
 			return err
@@ -562,7 +691,15 @@ func RechargeWaffoPancake(tradeNo string) (err error) {
 			return errors.New("无效的充值额度")
 		}
 
-		topUp.CompleteTime = common.GetTimestamp()
+		now := common.GetTimestamp()
+		if IsTopUpExpired(topUp, now) {
+			if err := expireTopUpTx(tx, topUp, now); err != nil {
+				return err
+			}
+			return ErrTopUpExpired
+		}
+
+		topUp.CompleteTime = now
 		topUp.Status = common.TopUpStatusSuccess
 		if err := tx.Save(topUp).Error; err != nil {
 			return err

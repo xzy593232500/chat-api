@@ -192,6 +192,10 @@ func GetMaxUserId() int {
 }
 
 func GetAllUsers(pageInfo *common.PageInfo) (users []*User, total int64, err error) {
+	if err := PurgeDeletedZeroQuotaUsers(); err != nil {
+		return nil, 0, err
+	}
+
 	// Start transaction
 	tx := DB.Begin()
 	if tx.Error != nil {
@@ -226,6 +230,10 @@ func GetAllUsers(pageInfo *common.PageInfo) (users []*User, total int64, err err
 }
 
 func SearchUsers(keyword string, group string, startIdx int, num int) ([]*User, int64, error) {
+	if err := PurgeDeletedZeroQuotaUsers(); err != nil {
+		return nil, 0, err
+	}
+
 	var users []*User
 	var total int64
 	var err error
@@ -327,8 +335,22 @@ func HardDeleteUserById(id int) error {
 	if id == 0 {
 		return errors.New("id 为空！")
 	}
-	err := DB.Unscoped().Delete(&User{}, "id = ?", id).Error
-	return err
+	if err := DB.Unscoped().Delete(&User{}, "id = ?", id).Error; err != nil {
+		return err
+	}
+	if err := invalidateUserCache(id); err != nil {
+		common.SysLog(fmt.Sprintf("failed to invalidate user cache for hard deleted user %d: %s", id, err.Error()))
+	}
+	if err := InvalidateUserTokensCache(id); err != nil {
+		common.SysLog(fmt.Sprintf("failed to invalidate tokens cache for hard deleted user %d: %s", id, err.Error()))
+	}
+	return nil
+}
+
+func PurgeDeletedZeroQuotaUsers() error {
+	return DB.Unscoped().
+		Where("deleted_at IS NOT NULL AND quota <= ? AND role < ?", 0, common.RoleRootUser).
+		Delete(&User{}).Error
 }
 
 func inviteUser(inviterId int) (err error) {

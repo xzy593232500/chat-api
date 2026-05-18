@@ -382,6 +382,16 @@ func EpayNotify(c *gin.Context) {
 			return
 		}
 		if topUp.Status == common.TopUpStatusPending {
+			now := common.GetTimestamp()
+			if model.IsTopUpExpired(topUp, now) {
+				topUp.Status = common.TopUpStatusExpired
+				topUp.CompleteTime = now
+				if err := topUp.Update(); err != nil {
+					logger.LogError(c.Request.Context(), fmt.Sprintf("epay expire topup failed trade_no=%s error=%q", topUp.TradeNo, err.Error()))
+				}
+				logger.LogWarn(c.Request.Context(), fmt.Sprintf("epay topup expired before callback trade_no=%s user_id=%d", topUp.TradeNo, topUp.UserId))
+				return
+			}
 			if topUp.PaymentMethod != verifyInfo.Type {
 				logger.LogInfo(c.Request.Context(), fmt.Sprintf("易支付 实际支付方式与订单不同 trade_no=%s order_payment_method=%s actual_type=%s client_ip=%s", verifyInfo.ServiceTradeNo, topUp.PaymentMethod, verifyInfo.Type, c.ClientIP()))
 				topUp.PaymentMethod = verifyInfo.Type
@@ -440,13 +450,16 @@ func GetUserTopUps(c *gin.Context) {
 	userId := c.GetInt("id")
 	pageInfo := common.GetPageQuery(c)
 	keyword := c.Query("keyword")
+	invoiceable := c.Query("invoiceable") == "true"
 
 	var (
 		topups []*model.TopUp
 		total  int64
 		err    error
 	)
-	if keyword != "" {
+	if invoiceable {
+		topups, total, err = model.GetUserInvoiceableTopUps(userId, keyword, pageInfo)
+	} else if keyword != "" {
 		topups, total, err = model.SearchUserTopUps(userId, keyword, pageInfo)
 	} else {
 		topups, total, err = model.GetUserTopUps(userId, pageInfo)
@@ -455,7 +468,10 @@ func GetUserTopUps(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
-	if err = model.AttachInvoiceStatusToTopUps(userId, topups); err != nil {
+	if !invoiceable {
+		err = model.AttachInvoiceStatusToTopUps(userId, topups)
+	}
+	if err != nil {
 		common.ApiError(c, err)
 		return
 	}

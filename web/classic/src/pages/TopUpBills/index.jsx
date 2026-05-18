@@ -39,7 +39,7 @@ const labels = {
   expired: '\u5df2\u8fc7\u671f',
   applied: '\u5df2\u7533\u8bf7',
   invoiceTitle: '\u7533\u8bf7\u5f00\u7968',
-  chooseBill: '1. \u9009\u62e9\u53ef\u5f00\u7968\u8d26\u5355\uff08\u4ec5\u663e\u793a\u6210\u529f\u5145\u503c\u8bb0\u5f55\uff09',
+  chooseBill: '1. \u9009\u62e9\u53ef\u5f00\u7968\u8d26\u5355\uff08\u4ec5\u663e\u793a\u6210\u529f\u4e14\u672a\u5f00\u8fc7\u53d1\u7968\u7684\u5145\u503c\u8bb0\u5f55\uff09',
   fillTitle: '2. \u586b\u5199\u53d1\u7968\u62ac\u5934',
   selectedCount: '\u5df2\u9009',
   records: '\u7b14',
@@ -103,6 +103,10 @@ function TopUpBills() {
   const [startAt, setStartAt] = useState(null);
   const [endAt, setEndAt] = useState(null);
   const [invoiceOpen, setInvoiceOpen] = useState(false);
+  const [invoiceLoading, setInvoiceLoading] = useState(false);
+  const [invoiceableTopups, setInvoiceableTopups] = useState([]);
+  const [invoiceableTotal, setInvoiceableTotal] = useState(0);
+  const [invoiceablePage, setInvoiceablePage] = useState(1);
   const [selectedIds, setSelectedIds] = useState([]);
   const [form, setForm] = useState({
     company_name: '',
@@ -134,6 +138,29 @@ function TopUpBills() {
     loadTopups();
   }, [page, pageSize, keyword]);
 
+  const loadInvoiceableTopups = async (targetPage = invoiceablePage) => {
+    setInvoiceLoading(true);
+    try {
+      const params = new URLSearchParams({
+        p: String(targetPage),
+        page_size: '10',
+        invoiceable: 'true',
+      });
+      const res = await API.get(`/api/user/topup/self?${params.toString()}`);
+      if (res.data?.success) {
+        setInvoiceableTopups(res.data.data?.items || []);
+        setInvoiceableTotal(res.data.data?.total || 0);
+        setInvoiceablePage(res.data.data?.page || targetPage);
+      } else {
+        Toast.error(res.data?.message || '\u52a0\u8f7d\u53ef\u5f00\u7968\u8d26\u5355\u5931\u8d25');
+      }
+    } catch (error) {
+      Toast.error('\u52a0\u8f7d\u53ef\u5f00\u7968\u8d26\u5355\u5931\u8d25');
+    } finally {
+      setInvoiceLoading(false);
+    }
+  };
+
   const filteredTopups = useMemo(() => {
     return topups.filter((item) => {
       if (status !== 'all' && item.status !== status) return false;
@@ -144,8 +171,8 @@ function TopUpBills() {
   }, [topups, status, startAt, endAt]);
 
   const selectedRecords = useMemo(
-    () => topups.filter((item) => selectedIds.includes(item.id)),
-    [topups, selectedIds],
+    () => invoiceableTopups.filter((item) => selectedIds.includes(item.id)),
+    [invoiceableTopups, selectedIds],
   );
 
   const selectedAmount = selectedRecords.reduce((sum, item) => sum + Number(item.money || 0), 0);
@@ -158,7 +185,9 @@ function TopUpBills() {
 
   const openInvoiceModal = () => {
     setSelectedIds([]);
+    setInvoiceablePage(1);
     setInvoiceOpen(true);
+    loadInvoiceableTopups(1);
   };
 
   const toggleSelected = (record) => {
@@ -220,17 +249,19 @@ function TopUpBills() {
 
   const invoiceColumns = [
     {
-      title: '',
-      width: 52,
-      render: (_, record) => (
-        <Checkbox
-          checked={selectedIds.includes(record.id)}
-          disabled={record.status !== 'success' || !!record.invoice_status}
-          onChange={() => toggleSelected(record)}
-        />
+      title: '\u4ea4\u6613\u53f7',
+      dataIndex: 'trade_no',
+      render: (text, record) => (
+        <span className='inline-flex items-center gap-3'>
+          <Checkbox
+            checked={selectedIds.includes(record.id)}
+            disabled={record.status !== 'success' || !!record.invoice_status}
+            onChange={() => toggleSelected(record)}
+          />
+          <span>{text}</span>
+        </span>
       ),
     },
-    { title: '\u4ea4\u6613\u53f7', dataIndex: 'trade_no' },
     { title: labels.paymentMethod, dataIndex: 'payment_method', render: (text) => paymentLabels[text] || text || '-' },
     {
       title: '\u91d1\u989d',
@@ -300,11 +331,27 @@ function TopUpBills() {
         <div className='space-y-4'>
           <div>
             <div className='mb-2 font-semibold'>{labels.chooseBill}</div>
-            <Table columns={invoiceColumns} dataSource={topups} rowKey='id' size='small' pagination={{ pageSize: 3 }} onRow={(record) => ({ onClick: () => toggleSelected(record) })} />
+            <Table
+              columns={invoiceColumns}
+              dataSource={invoiceableTopups}
+              rowKey='id'
+              size='small'
+              loading={invoiceLoading}
+              pagination={{
+                currentPage: invoiceablePage,
+                pageSize: 10,
+                total: invoiceableTotal,
+                onPageChange: (nextPage) => {
+                  setSelectedIds([]);
+                  loadInvoiceableTopups(nextPage);
+                },
+              }}
+              empty={<Empty description='\u6682\u65e0\u53ef\u5f00\u7968\u8d26\u5355' />}
+            />
           </div>
-          <div className='flex items-center justify-between rounded-lg border border-semi-color-border bg-semi-color-fill-0 px-4 py-3'>
+          <div className='flex items-center justify-between rounded-lg border border-semi-color-border bg-semi-color-fill-0 px-4 py-4'>
             <span>{labels.selectedCount}: {selectedIds.length} {labels.records}</span>
-            <span>{labels.invoiceAmount}: <Text type='danger' strong>{money(selectedAmount)}</Text></span>
+            <span className='text-2xl font-semibold'>{labels.invoiceAmount}: <Text type='danger' strong className='!text-2xl'>{money(selectedAmount)}</Text></span>
           </div>
           <Text type='tertiary' size='small'>{labels.note}</Text>
           <div className='border-t border-semi-color-border pt-4'>
@@ -316,7 +363,7 @@ function TopUpBills() {
               <Form.TextArea field='remark' label={labels.remark} placeholder={labels.remarkPlaceholder} maxCount={100} autosize={{ minRows: 3, maxRows: 4 }} value={form.remark} onChange={(value) => setForm((prev) => ({ ...prev, remark: value }))} />
             </Form>
           </div>
-          <div className='flex items-center justify-between gap-3'>
+          <div className='flex items-center justify-between gap-3 border-t border-semi-color-border pt-5 pb-3'>
             <Text type='tertiary'>{selectedAmount < MIN_INVOICE_AMOUNT ? labels.minTip : ''}</Text>
             <div className='flex items-center gap-2'>
               <Button onClick={() => setInvoiceOpen(false)}>{labels.cancel}</Button>

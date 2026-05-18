@@ -173,7 +173,7 @@ func RequestWaffoPancakePay(c *gin.Context) {
 		return
 	}
 
-	expiresInSeconds := 45 * 60
+	expiresInSeconds := int(model.TopUpExpireSeconds)
 	session, err := service.CreateWaffoPancakeCheckoutSession(c.Request.Context(), &service.WaffoPancakeCreateSessionParams{
 		StoreID:     setting.WaffoPancakeStoreID,
 		ProductID:   setting.WaffoPancakeProductID,

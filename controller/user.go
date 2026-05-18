@@ -795,7 +795,12 @@ func DeleteSelf(c *gin.Context) {
 		return
 	}
 
-	err := model.DeleteUserById(id)
+	var err error
+	if user.Quota <= 0 {
+		err = model.HardDeleteUserById(id)
+	} else {
+		err = model.DeleteUserById(id)
+	}
 	if err != nil {
 		common.ApiError(c, err)
 		return
