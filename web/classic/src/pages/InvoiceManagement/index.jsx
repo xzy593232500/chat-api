@@ -49,6 +49,56 @@ function statusText(status) {
   return <span style={{ color: config.color, fontWeight: 600 }}>{config.text}</span>;
 }
 
+const DOWNLOAD_FAIL_TEXT = '\u4e0b\u8f7d\u5931\u8d25';
+
+function getFileNameFromDisposition(disposition, fallback) {
+  if (!disposition) return fallback;
+
+  const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1]);
+    } catch (error) {
+      return fallback;
+    }
+  }
+
+  const fileNameMatch = disposition.match(/filename="?([^";]+)"?/i);
+  return fileNameMatch?.[1] || fallback;
+}
+
+async function downloadInvoiceFile(url, fallbackName) {
+  const res = await API.get(url, {
+    responseType: 'blob',
+    disableDuplicate: true,
+    skipErrorHandler: true,
+  });
+
+  const contentType = res.headers?.['content-type'] || '';
+  if (contentType.includes('application/json')) {
+    let message = DOWNLOAD_FAIL_TEXT;
+    try {
+      const text = await res.data.text();
+      const data = JSON.parse(text);
+      message = data.message || message;
+    } catch (error) {
+      // keep fallback message
+    }
+    Toast.error(message);
+    return;
+  }
+
+  const blob = res.data instanceof Blob ? res.data : new Blob([res.data], { type: contentType || 'application/octet-stream' });
+  const href = window.URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = href;
+  link.download = getFileNameFromDisposition(res.headers?.['content-disposition'], fallbackName);
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => window.URL.revokeObjectURL(href), 1000);
+}
+
 function InvoiceManagement() {
   const [loading, setLoading] = useState(false);
   const [invoices, setInvoices] = useState([]);
@@ -78,8 +128,15 @@ function InvoiceManagement() {
     loadInvoices();
   }, [page, pageSize]);
 
-  const downloadInvoice = (record) => {
-    window.open(`/api/user/invoice/${record.id}/download`, '_blank');
+  const downloadInvoice = async (record) => {
+    try {
+      await downloadInvoiceFile(
+        `/api/user/invoice/${record.id}/download`,
+        record.invoice_file_name || `invoice-${record.id}`,
+      );
+    } catch (error) {
+      Toast.error(DOWNLOAD_FAIL_TEXT);
+    }
   };
 
   const withdrawInvoice = (record) => {
