@@ -20,6 +20,14 @@ import { getStatus } from '@/lib/api'
 
 export type ModuleAccess = { enabled: boolean; requireAuth: boolean }
 
+export type HeaderNavCustomPage = {
+  enabled: boolean
+  title: string
+  url: string
+  html: string
+  useHtml: boolean
+}
+
 export type HeaderNavModule = 'rankings' | 'pricing'
 
 export type HeaderNavModules = {
@@ -27,10 +35,18 @@ export type HeaderNavModules = {
   console: boolean
   pricing: ModuleAccess
   rankings: ModuleAccess
-  gptImage: boolean
   docs: boolean
   about: boolean
-  [key: string]: boolean | ModuleAccess
+  customPage: HeaderNavCustomPage
+  [key: string]: boolean | ModuleAccess | HeaderNavCustomPage
+}
+
+const DEFAULT_CUSTOM_PAGE: HeaderNavCustomPage = {
+  enabled: false,
+  title: '自定义页面',
+  url: '',
+  html: '',
+  useHtml: false,
 }
 
 const DEFAULT_HEADER_NAV_MODULES: HeaderNavModules = {
@@ -38,9 +54,9 @@ const DEFAULT_HEADER_NAV_MODULES: HeaderNavModules = {
   console: true,
   pricing: { enabled: true, requireAuth: false },
   rankings: { enabled: true, requireAuth: false },
-  gptImage: true,
   docs: true,
   about: true,
+  customPage: { ...DEFAULT_CUSTOM_PAGE },
 }
 
 const DEFAULTS: Record<HeaderNavModule, ModuleAccess> = {
@@ -53,6 +69,7 @@ function cloneHeaderNavDefaults(): HeaderNavModules {
     ...DEFAULT_HEADER_NAV_MODULES,
     pricing: { ...DEFAULT_HEADER_NAV_MODULES.pricing },
     rankings: { ...DEFAULT_HEADER_NAV_MODULES.rankings },
+    customPage: { ...DEFAULT_HEADER_NAV_MODULES.customPage },
   }
 }
 
@@ -74,6 +91,12 @@ export function parseHeaderNavBoolean(
   return fallback
 }
 
+function parseHeaderNavString(raw: unknown, fallback: string): string {
+  if (typeof raw === 'string') return raw
+  if (raw === null || raw === undefined) return fallback
+  return String(raw)
+}
+
 function parseAccess(raw: unknown, fallback: ModuleAccess): ModuleAccess {
   if (
     typeof raw === 'boolean' ||
@@ -92,6 +115,35 @@ function parseAccess(raw: unknown, fallback: ModuleAccess): ModuleAccess {
       requireAuth: parseHeaderNavBoolean(r.requireAuth, fallback.requireAuth),
     }
   }
+  return { ...fallback }
+}
+
+function parseCustomPage(
+  raw: unknown,
+  fallback: HeaderNavCustomPage
+): HeaderNavCustomPage {
+  if (
+    typeof raw === 'boolean' ||
+    typeof raw === 'number' ||
+    typeof raw === 'string'
+  ) {
+    return {
+      ...fallback,
+      enabled: parseHeaderNavBoolean(raw, fallback.enabled),
+    }
+  }
+
+  if (raw && typeof raw === 'object') {
+    const r = raw as Record<string, unknown>
+    return {
+      enabled: parseHeaderNavBoolean(r.enabled, fallback.enabled),
+      title: parseHeaderNavString(r.title, fallback.title),
+      url: parseHeaderNavString(r.url, fallback.url),
+      html: parseHeaderNavString(r.html, fallback.html),
+      useHtml: parseHeaderNavBoolean(r.useHtml, fallback.useHtml),
+    }
+  }
+
   return { ...fallback }
 }
 
@@ -118,6 +170,10 @@ export function parseHeaderNavModules(raw: unknown): HeaderNavModules {
     }
     if (key === 'rankings') {
       result.rankings = parseAccess(value, result.rankings)
+      return
+    }
+    if (key === 'customPage') {
+      result.customPage = parseCustomPage(value, result.customPage)
       return
     }
 

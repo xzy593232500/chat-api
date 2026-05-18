@@ -23,8 +23,10 @@ import {
   Card,
   Col,
   Form,
+  Input,
   Row,
   Switch,
+  TextArea,
   Typography,
 } from '@douyinfe/semi-ui';
 import { API, showError, showSuccess } from '../../../helpers';
@@ -33,32 +35,64 @@ import { StatusContext } from '../../../context/Status';
 
 const { Text } = Typography;
 
+const DEFAULT_HEADER_NAV_MODULES = {
+  home: true,
+  console: true,
+  pricing: {
+    enabled: true,
+    requireAuth: false,
+  },
+  docs: true,
+  about: true,
+  customPage: {
+    enabled: false,
+    title: '自定义页面',
+    url: '',
+    html: '',
+    useHtml: false,
+  },
+};
+
+function normalizeHeaderNavModules(modules = {}) {
+  const normalized = {
+    ...DEFAULT_HEADER_NAV_MODULES,
+    ...modules,
+    pricing: {
+      ...DEFAULT_HEADER_NAV_MODULES.pricing,
+      ...(typeof modules.pricing === 'object' ? modules.pricing : {}),
+    },
+    customPage: {
+      ...DEFAULT_HEADER_NAV_MODULES.customPage,
+      ...(typeof modules.customPage === 'object' ? modules.customPage : {}),
+    },
+  };
+
+  if (typeof modules.pricing === 'boolean') {
+    normalized.pricing.enabled = modules.pricing;
+  }
+
+  if (typeof modules.customPage === 'boolean') {
+    normalized.customPage.enabled = modules.customPage;
+  }
+
+  delete normalized.gptImage;
+  return normalized;
+}
+
 export default function SettingsHeaderNavModules(props) {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [statusState, statusDispatch] = useContext(StatusContext);
+  const [headerNavModules, setHeaderNavModules] = useState(
+    DEFAULT_HEADER_NAV_MODULES,
+  );
 
-  // 顶栏模块管理状态
-  const [headerNavModules, setHeaderNavModules] = useState({
-    home: true,
-    console: true,
-    pricing: {
-      enabled: true,
-      requireAuth: false, // 默认不需要登录鉴权
-    },
-    gptImage: true,
-    docs: true,
-    about: true,
-  });
-
-  // 处理顶栏模块配置变更
   function handleHeaderNavModuleChange(moduleKey) {
     return (checked) => {
       const newModules = { ...headerNavModules };
       if (moduleKey === 'pricing') {
-        // 对于pricing模块，只更新enabled属性
-        newModules[moduleKey] = {
-          ...newModules[moduleKey],
+        newModules.pricing = {
+          ...newModules.pricing,
           enabled: checked,
         };
       } else {
@@ -68,55 +102,52 @@ export default function SettingsHeaderNavModules(props) {
     };
   }
 
-  // 处理模型广场权限控制变更
   function handlePricingAuthChange(checked) {
-    const newModules = { ...headerNavModules };
-    newModules.pricing = {
-      ...newModules.pricing,
-      requireAuth: checked,
-    };
-    setHeaderNavModules(newModules);
+    setHeaderNavModules({
+      ...headerNavModules,
+      pricing: {
+        ...headerNavModules.pricing,
+        requireAuth: checked,
+      },
+    });
   }
 
-  // 重置顶栏模块为默认配置
-  function resetHeaderNavModules() {
-    const defaultModules = {
-      home: true,
-      console: true,
-      pricing: {
-        enabled: true,
-        requireAuth: false,
+  function handleCustomPageChange(field, value) {
+    setHeaderNavModules({
+      ...headerNavModules,
+      customPage: {
+        ...headerNavModules.customPage,
+        [field]: value,
       },
-      gptImage: true,
-      docs: true,
-      about: true,
-    };
-    setHeaderNavModules(defaultModules);
+    });
+  }
+
+  function resetHeaderNavModules() {
+    setHeaderNavModules(DEFAULT_HEADER_NAV_MODULES);
     showSuccess(t('已重置为默认配置'));
   }
 
-  // 保存配置
   async function onSubmit() {
     setLoading(true);
     try {
+      const normalized = normalizeHeaderNavModules(headerNavModules);
+      const serialized = JSON.stringify(normalized);
       const res = await API.put('/api/option/', {
         key: 'HeaderNavModules',
-        value: JSON.stringify(headerNavModules),
+        value: serialized,
       });
       const { success, message } = res.data;
       if (success) {
         showSuccess(t('保存成功'));
 
-        // 立即更新StatusContext中的状态
         statusDispatch({
           type: 'set',
           payload: {
             ...statusState.status,
-            HeaderNavModules: JSON.stringify(headerNavModules),
+            HeaderNavModules: serialized,
           },
         });
 
-        // 刷新父组件状态
         if (props.refresh) {
           await props.refresh();
         }
@@ -131,50 +162,16 @@ export default function SettingsHeaderNavModules(props) {
   }
 
   useEffect(() => {
-    // 从 props.options 中获取配置
     if (props.options && props.options.HeaderNavModules) {
       try {
         const modules = JSON.parse(props.options.HeaderNavModules);
-
-        // 处理向后兼容性：如果pricing是boolean，转换为对象格式
-        if (typeof modules.pricing === 'boolean') {
-          modules.pricing = {
-            enabled: modules.pricing,
-            requireAuth: false, // 默认不需要登录鉴权
-          };
-        }
-
-        setHeaderNavModules({
-          home: true,
-          console: true,
-          pricing: {
-            enabled: true,
-            requireAuth: false,
-          },
-          gptImage: true,
-          docs: true,
-          about: true,
-          ...modules,
-        });
+        setHeaderNavModules(normalizeHeaderNavModules(modules));
       } catch (error) {
-        // 使用默认配置
-        const defaultModules = {
-          home: true,
-          console: true,
-          pricing: {
-            enabled: true,
-            requireAuth: false,
-          },
-          gptImage: true,
-          docs: true,
-          about: true,
-        };
-        setHeaderNavModules(defaultModules);
+        setHeaderNavModules(DEFAULT_HEADER_NAV_MODULES);
       }
     }
   }, [props.options]);
 
-  // 模块配置数据
   const moduleConfigs = [
     {
       key: 'home',
@@ -189,13 +186,7 @@ export default function SettingsHeaderNavModules(props) {
     {
       key: 'pricing',
       title: t('模型广场'),
-      description: t('模型定价，需要登录访问'),
-      hasSubConfig: true, // 标识该模块有子配置
-    },
-    {
-      key: 'gptImage',
-      title: t('GPT 图像'),
-      description: t('GPT Image Playground 快速入口'),
+      description: t('模型定价和模型列表'),
     },
     {
       key: 'docs',
@@ -208,6 +199,9 @@ export default function SettingsHeaderNavModules(props) {
       description: t('关于系统的详细信息'),
     },
   ];
+
+  const customPageEnabled = headerNavModules.customPage?.enabled || false;
+  const customPageUseHtml = headerNavModules.customPage?.useHtml || false;
 
   return (
     <Card>
@@ -265,7 +259,7 @@ export default function SettingsHeaderNavModules(props) {
                     <Switch
                       checked={
                         module.key === 'pricing'
-                          ? headerNavModules[module.key]?.enabled
+                          ? headerNavModules.pricing?.enabled
                           : headerNavModules[module.key]
                       }
                       onChange={handleHeaderNavModuleChange(module.key)}
@@ -274,65 +268,147 @@ export default function SettingsHeaderNavModules(props) {
                   </div>
                 </div>
 
-                {/* 为模型广场添加权限控制子开关 */}
-                {module.key === 'pricing' &&
-                  (module.key === 'pricing'
-                    ? headerNavModules[module.key]?.enabled
-                    : headerNavModules[module.key]) && (
+                {module.key === 'pricing' && headerNavModules.pricing?.enabled && (
+                  <div
+                    style={{
+                      borderTop: '1px solid var(--semi-color-border)',
+                      marginTop: '12px',
+                      paddingTop: '12px',
+                    }}
+                  >
                     <div
                       style={{
-                        borderTop: '1px solid var(--semi-color-border)',
-                        marginTop: '12px',
-                        paddingTop: '12px',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
                       }}
                     >
-                      <div
-                        style={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                        }}
-                      >
-                        <div style={{ flex: 1, textAlign: 'left' }}>
-                          <div
-                            style={{
-                              fontWeight: '500',
-                              fontSize: '12px',
-                              color: 'var(--semi-color-text-1)',
-                              marginBottom: '2px',
-                            }}
-                          >
-                            {t('需要登录访问')}
-                          </div>
-                          <Text
-                            type='secondary'
-                            size='small'
-                            style={{
-                              fontSize: '11px',
-                              color: 'var(--semi-color-text-2)',
-                              lineHeight: '1.4',
-                              display: 'block',
-                            }}
-                          >
-                            {t('开启后未登录用户无法访问模型广场')}
-                          </Text>
+                      <div style={{ flex: 1, textAlign: 'left' }}>
+                        <div
+                          style={{
+                            fontWeight: '500',
+                            fontSize: '12px',
+                            color: 'var(--semi-color-text-1)',
+                            marginBottom: '2px',
+                          }}
+                        >
+                          {t('需要登录访问')}
                         </div>
-                        <div style={{ marginLeft: '16px' }}>
-                          <Switch
-                            checked={
-                              headerNavModules.pricing?.requireAuth || false
-                            }
-                            onChange={handlePricingAuthChange}
-                            size='default'
-                          />
-                        </div>
+                        <Text
+                          type='secondary'
+                          size='small'
+                          style={{
+                            fontSize: '11px',
+                            color: 'var(--semi-color-text-2)',
+                            lineHeight: '1.4',
+                            display: 'block',
+                          }}
+                        >
+                          {t('开启后未登录用户无法访问模型广场')}
+                        </Text>
+                      </div>
+                      <div style={{ marginLeft: '16px' }}>
+                        <Switch
+                          checked={headerNavModules.pricing?.requireAuth || false}
+                          onChange={handlePricingAuthChange}
+                          size='default'
+                        />
                       </div>
                     </div>
-                  )}
+                  </div>
+                )}
               </Card>
             </Col>
           ))}
         </Row>
+
+        <Card
+          style={{
+            borderRadius: '8px',
+            border: '1px solid var(--semi-color-border)',
+            background: 'var(--semi-color-bg-1)',
+            marginBottom: '24px',
+          }}
+          bodyStyle={{ padding: '16px' }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'flex-start',
+              gap: '16px',
+              marginBottom: '16px',
+            }}
+          >
+            <div style={{ textAlign: 'left' }}>
+              <div style={{ fontWeight: 600, fontSize: 16 }}>
+                {t('自定义页面')}
+              </div>
+              <Text type='secondary'>
+                {t('可自定义导航名称、跳转链接，或使用站内 HTML 页面')}
+              </Text>
+            </div>
+            <Switch
+              checked={customPageEnabled}
+              onChange={(checked) => handleCustomPageChange('enabled', checked)}
+            />
+          </div>
+
+          <Row gutter={[16, 16]}>
+            <Col xs={24} md={12}>
+              <div style={{ marginBottom: 8 }}>{t('导航名称')}</div>
+              <Input
+                value={headerNavModules.customPage?.title || ''}
+                placeholder={t('自定义页面')}
+                disabled={!customPageEnabled}
+                onChange={(value) => handleCustomPageChange('title', value)}
+              />
+            </Col>
+            <Col xs={24} md={12}>
+              <div style={{ marginBottom: 8 }}>{t('跳转链接')}</div>
+              <Input
+                value={headerNavModules.customPage?.url || ''}
+                placeholder='https://example.com'
+                disabled={!customPageEnabled || customPageUseHtml}
+                onChange={(value) => handleCustomPageChange('url', value)}
+              />
+            </Col>
+          </Row>
+
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              borderTop: '1px dashed var(--semi-color-border)',
+              marginTop: 16,
+              paddingTop: 16,
+            }}
+          >
+            <div style={{ textAlign: 'left' }}>
+              <div style={{ fontWeight: 500 }}>{t('使用 HTML 页面')}</div>
+              <Text type='secondary'>
+                {t('开启后点击导航会打开站内页面并渲染下面的 HTML')}
+              </Text>
+            </div>
+            <Switch
+              checked={customPageUseHtml}
+              disabled={!customPageEnabled}
+              onChange={(checked) => handleCustomPageChange('useHtml', checked)}
+            />
+          </div>
+
+          <div style={{ marginTop: 16 }}>
+            <div style={{ marginBottom: 8 }}>{t('HTML 内容')}</div>
+            <TextArea
+              value={headerNavModules.customPage?.html || ''}
+              placeholder='<section><h1>My Page</h1></section>'
+              rows={8}
+              disabled={!customPageEnabled || !customPageUseHtml}
+              onChange={(value) => handleCustomPageChange('html', value)}
+            />
+          </div>
+        </Card>
 
         <div
           style={{

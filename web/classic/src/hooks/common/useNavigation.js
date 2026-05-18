@@ -19,20 +19,51 @@ For commercial licensing, please contact support@quantumnous.com
 
 import { useMemo } from 'react';
 
+const defaultModules = {
+  home: true,
+  console: true,
+  pricing: true,
+  docs: true,
+  about: true,
+  customPage: {
+    enabled: false,
+    title: '自定义页面',
+    url: '',
+    html: '',
+    useHtml: false,
+  },
+};
+
+const isExternalHref = (href) =>
+  /^(https?:)?\/\//i.test(href) || /^(mailto|tel):/i.test(href);
+
+function normalizeModules(headerNavModules) {
+  const modules = {
+    ...defaultModules,
+    ...(headerNavModules || {}),
+    customPage: {
+      ...defaultModules.customPage,
+      ...(typeof headerNavModules?.customPage === 'object'
+        ? headerNavModules.customPage
+        : {}),
+    },
+  };
+
+  if (typeof headerNavModules?.customPage === 'boolean') {
+    modules.customPage.enabled = headerNavModules.customPage;
+  }
+
+  return modules;
+}
+
 export const useNavigation = (t, docsLink, headerNavModules) => {
   const mainNavLinks = useMemo(() => {
-    // 默认配置，如果没有传入配置则显示所有模块
-    const defaultModules = {
-      home: true,
-      console: true,
-      pricing: true,
-      gptImage: true,
-      docs: true,
-      about: true,
-    };
-
-    // 使用传入的配置或默认配置
-    const modules = headerNavModules || defaultModules;
+    const modules = normalizeModules(headerNavModules);
+    const customPage = modules.customPage;
+    const customPageTitle = customPage.title?.trim() || t('自定义页面');
+    const customPageUrl = customPage.url?.trim() || '';
+    const customPageHref =
+      customPage.useHtml || !customPageUrl ? '/custom-page' : customPageUrl;
 
     const allLinks = [
       {
@@ -50,12 +81,6 @@ export const useNavigation = (t, docsLink, headerNavModules) => {
         itemKey: 'pricing',
         to: '/pricing',
       },
-      {
-        text: t('GPT 图像'),
-        itemKey: 'gptImage',
-        isExternal: true,
-        externalLink: 'http://192.241.174.137:8080',
-      },
       ...(docsLink
         ? [
             {
@@ -66,6 +91,17 @@ export const useNavigation = (t, docsLink, headerNavModules) => {
             },
           ]
         : []),
+      ...(customPage.enabled
+        ? [
+            {
+              text: customPageTitle,
+              itemKey: 'customPage',
+              to: customPageHref,
+              isExternal: isExternalHref(customPageHref),
+              externalLink: customPageHref,
+            },
+          ]
+        : []),
       {
         text: t('关于'),
         itemKey: 'about',
@@ -73,16 +109,17 @@ export const useNavigation = (t, docsLink, headerNavModules) => {
       },
     ];
 
-    // 根据配置过滤导航链接
     return allLinks.filter((link) => {
       if (link.itemKey === 'docs') {
         return docsLink && modules.docs;
       }
       if (link.itemKey === 'pricing') {
-        // 支持新的pricing配置格式
         return typeof modules.pricing === 'object'
           ? modules.pricing.enabled
           : modules.pricing;
+      }
+      if (link.itemKey === 'customPage') {
+        return modules.customPage?.enabled;
       }
       return modules[link.itemKey] !== false;
     });

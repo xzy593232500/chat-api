@@ -31,7 +31,9 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
 import { SettingsSection } from '../components/settings-section'
 import { useUpdateOption } from '../hooks/use-update-option'
 import {
@@ -47,9 +49,13 @@ const headerNavSchema = z.object({
   pricingRequireAuth: z.boolean(),
   rankingsEnabled: z.boolean(),
   rankingsRequireAuth: z.boolean(),
-  gptImage: z.boolean(),
   docs: z.boolean(),
   about: z.boolean(),
+  customPageEnabled: z.boolean(),
+  customPageTitle: z.string(),
+  customPageUrl: z.string(),
+  customPageUseHtml: z.boolean(),
+  customPageHtml: z.string(),
 })
 
 type HeaderNavFormValues = z.infer<typeof headerNavSchema>
@@ -82,16 +88,25 @@ const toFormValues = (config: HeaderNavModulesConfig): HeaderNavFormValues => ({
     config.rankings?.requireAuth === undefined
       ? HEADER_NAV_DEFAULT.rankings.requireAuth
       : Boolean(config.rankings.requireAuth),
-  gptImage:
-    config.gptImage === undefined
-      ? HEADER_NAV_DEFAULT.gptImage
-      : Boolean(config.gptImage),
   docs:
     config.docs === undefined ? HEADER_NAV_DEFAULT.docs : Boolean(config.docs),
   about:
     config.about === undefined
       ? HEADER_NAV_DEFAULT.about
       : Boolean(config.about),
+  customPageEnabled:
+    config.customPage?.enabled === undefined
+      ? HEADER_NAV_DEFAULT.customPage.enabled
+      : Boolean(config.customPage.enabled),
+  customPageTitle:
+    config.customPage?.title ?? HEADER_NAV_DEFAULT.customPage.title,
+  customPageUrl: config.customPage?.url ?? HEADER_NAV_DEFAULT.customPage.url,
+  customPageUseHtml:
+    config.customPage?.useHtml === undefined
+      ? HEADER_NAV_DEFAULT.customPage.useHtml
+      : Boolean(config.customPage.useHtml),
+  customPageHtml:
+    config.customPage?.html ?? HEADER_NAV_DEFAULT.customPage.html,
 })
 
 export function HeaderNavigationSection({
@@ -116,9 +131,16 @@ export function HeaderNavigationSection({
       ...config,
       home: values.home,
       console: values.console,
-      gptImage: values.gptImage,
       docs: values.docs,
       about: values.about,
+      customPage: {
+        ...(config.customPage ?? HEADER_NAV_DEFAULT.customPage),
+        enabled: values.customPageEnabled,
+        title: values.customPageTitle.trim(),
+        url: values.customPageUrl.trim(),
+        html: values.customPageHtml,
+        useHtml: values.customPageUseHtml,
+      },
       pricing: {
         ...(config.pricing ?? HEADER_NAV_DEFAULT.pricing),
         enabled: values.pricingEnabled,
@@ -146,6 +168,9 @@ export function HeaderNavigationSection({
     form.reset(toFormValues(HEADER_NAV_DEFAULT))
   }
 
+  const customPageEnabled = form.watch('customPageEnabled')
+  const customPageUseHtml = form.watch('customPageUseHtml')
+
   const simpleModules: Array<{
     key: keyof HeaderNavFormValues
     title: string
@@ -160,11 +185,6 @@ export function HeaderNavigationSection({
       key: 'console',
       title: t('Console'),
       description: t('User dashboard and quota controls.'),
-    },
-    {
-      key: 'gptImage',
-      title: 'GPT 图像',
-      description: t('GPT Image Playground quick link.'),
     },
     {
       key: 'docs',
@@ -234,7 +254,7 @@ export function HeaderNavigationSection({
                     </div>
                     <FormControl>
                       <Switch
-                        checked={field.value}
+                        checked={field.value as boolean}
                         onCheckedChange={field.onChange}
                       />
                     </FormControl>
@@ -261,7 +281,7 @@ export function HeaderNavigationSection({
                       </div>
                       <FormControl>
                         <Switch
-                          checked={field.value}
+                          checked={field.value as boolean}
                           onCheckedChange={field.onChange}
                         />
                       </FormControl>
@@ -285,7 +305,7 @@ export function HeaderNavigationSection({
                       </div>
                       <FormControl>
                         <Switch
-                          checked={field.value}
+                          checked={field.value as boolean}
                           onCheckedChange={field.onChange}
                           disabled={!form.watch(module.requireAuthDependsOn)}
                         />
@@ -296,6 +316,115 @@ export function HeaderNavigationSection({
                 />
               </div>
             ))}
+          </div>
+
+          <div className='rounded-lg border p-4'>
+            <FormField
+              control={form.control}
+              name='customPageEnabled'
+              render={({ field }) => (
+                <FormItem className='flex flex-row items-start justify-between'>
+                  <div className='space-y-0.5 pe-4'>
+                    <FormLabel className='text-base'>
+                      {t('Custom Page')}
+                    </FormLabel>
+                    <FormDescription>
+                      {t('Add a configurable top navigation item with a custom name, link, or HTML page.')}
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <div className='mt-4 grid gap-4 md:grid-cols-2'>
+              <FormField
+                control={form.control}
+                name='customPageTitle'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Navigation name')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder={t('Custom Page')}
+                        disabled={!customPageEnabled}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='customPageUrl'
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('Jump link')}</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder='https://example.com'
+                        disabled={!customPageEnabled || customPageUseHtml}
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {t('Used when HTML mode is disabled. Leave empty to open the built-in custom page.')}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <FormField
+              control={form.control}
+              name='customPageUseHtml'
+              render={({ field }) => (
+                <FormItem className='mt-4 flex flex-row items-start justify-between rounded-lg border border-dashed p-4'>
+                  <div className='space-y-0.5 pe-4'>
+                    <FormLabel>{t('Use HTML page')}</FormLabel>
+                    <FormDescription>
+                      {t('Open an internal page and render the HTML content below.')}
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      disabled={!customPageEnabled}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='customPageHtml'
+              render={({ field }) => (
+                <FormItem className='mt-4'>
+                  <FormLabel>{t('HTML content')}</FormLabel>
+                  <FormControl>
+                    <Textarea
+                      rows={8}
+                      placeholder='<section><h1>My Page</h1></section>'
+                      disabled={!customPageEnabled || !customPageUseHtml}
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
           </div>
 
           <div className='flex flex-wrap gap-3'>

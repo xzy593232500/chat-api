@@ -21,15 +21,23 @@ export type HeaderNavAccessConfig = {
   requireAuth: boolean
 }
 
+export type HeaderNavCustomPageConfig = {
+  enabled: boolean
+  title: string
+  url: string
+  html: string
+  useHtml: boolean
+}
+
 export type HeaderNavModulesConfig = {
   home: boolean
   console: boolean
   pricing: HeaderNavAccessConfig
   rankings: HeaderNavAccessConfig
-  gptImage: boolean
   docs: boolean
   about: boolean
-  [key: string]: boolean | HeaderNavAccessConfig
+  customPage: HeaderNavCustomPageConfig
+  [key: string]: boolean | HeaderNavAccessConfig | HeaderNavCustomPageConfig
 }
 
 export type SidebarSectionConfig = {
@@ -38,6 +46,14 @@ export type SidebarSectionConfig = {
 }
 
 export type SidebarModulesAdminConfig = Record<string, SidebarSectionConfig>
+
+const HEADER_NAV_CUSTOM_PAGE_DEFAULT: HeaderNavCustomPageConfig = {
+  enabled: false,
+  title: '自定义页面',
+  url: '',
+  html: '',
+  useHtml: false,
+}
 
 export const HEADER_NAV_DEFAULT: HeaderNavModulesConfig = {
   home: true,
@@ -50,9 +66,9 @@ export const HEADER_NAV_DEFAULT: HeaderNavModulesConfig = {
     enabled: true,
     requireAuth: false,
   },
-  gptImage: true,
   docs: true,
   about: true,
+  customPage: { ...HEADER_NAV_CUSTOM_PAGE_DEFAULT },
 }
 
 export const SIDEBAR_MODULES_DEFAULT: SidebarModulesAdminConfig = {
@@ -96,10 +112,17 @@ const toBoolean = (value: unknown, fallback: boolean): boolean => {
   return fallback
 }
 
+const toString = (value: unknown, fallback: string): string => {
+  if (typeof value === 'string') return value
+  if (value === null || value === undefined) return fallback
+  return String(value)
+}
+
 const cloneHeaderNavDefault = (): HeaderNavModulesConfig => ({
   ...HEADER_NAV_DEFAULT,
   pricing: { ...HEADER_NAV_DEFAULT.pricing },
   rankings: { ...HEADER_NAV_DEFAULT.rankings },
+  customPage: { ...HEADER_NAV_DEFAULT.customPage },
 })
 
 const parseAccessModule = (
@@ -121,6 +144,33 @@ const parseAccessModule = (
     return {
       enabled: toBoolean(record.enabled, fallback.enabled),
       requireAuth: toBoolean(record.requireAuth, fallback.requireAuth),
+    }
+  }
+  return { ...fallback }
+}
+
+const parseCustomPageModule = (
+  raw: unknown,
+  fallback: HeaderNavCustomPageConfig
+): HeaderNavCustomPageConfig => {
+  if (
+    typeof raw === 'boolean' ||
+    typeof raw === 'string' ||
+    typeof raw === 'number'
+  ) {
+    return {
+      ...fallback,
+      enabled: toBoolean(raw, fallback.enabled),
+    }
+  }
+  if (raw && typeof raw === 'object') {
+    const record = raw as Record<string, unknown>
+    return {
+      enabled: toBoolean(record.enabled, fallback.enabled),
+      title: toString(record.title, fallback.title),
+      url: toString(record.url, fallback.url),
+      html: toString(record.html, fallback.html),
+      useHtml: toBoolean(record.useHtml, fallback.useHtml),
     }
   }
   return { ...fallback }
@@ -148,6 +198,7 @@ export function parseHeaderNavModules(
       ...base,
       pricing: { ...base.pricing },
       rankings: { ...base.rankings },
+      customPage: { ...base.customPage },
     }
 
     Object.entries(parsed).forEach(([key, raw]) => {
@@ -157,6 +208,10 @@ export function parseHeaderNavModules(
       }
       if (key === 'rankings') {
         result.rankings = parseAccessModule(raw, base.rankings)
+        return
+      }
+      if (key === 'customPage') {
+        result.customPage = parseCustomPageModule(raw, base.customPage)
         return
       }
 

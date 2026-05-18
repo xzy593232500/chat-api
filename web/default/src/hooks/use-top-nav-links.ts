@@ -30,6 +30,9 @@ export type TopNavLink = {
   external?: boolean
 }
 
+const isExternalHref = (href: string): boolean =>
+  /^(https?:)?\/\//i.test(href) || /^(mailto|tel):/i.test(href)
+
 /**
  * Generate top navigation links based on HeaderNavModules configuration from backend /api/status
  * Backend format example (stringified JSON):
@@ -38,9 +41,9 @@ export type TopNavLink = {
  *   console: true,
  *   pricing: { enabled: true, requireAuth: false },
  *   rankings: { enabled: true, requireAuth: false },
- *   gptImage: true,
  *   docs: true,
- *   about: true
+ *   about: true,
+ *   customPage: { enabled: false, title: '自定义页面', url: '', html: '', useHtml: false }
  * }
  */
 export function useTopNavLinks(): TopNavLink[] {
@@ -78,16 +81,6 @@ export function useTopNavLinks(): TopNavLink[] {
     const requiresAuth = pricing.requireAuth && !isAuthed
     links.push({ title: t('Model Square'), href: '/pricing', requiresAuth })
   }
-
-  // GPT Image Playground
-  if (modules?.gptImage !== false) {
-    links.push({
-      title: 'GPT 图像',
-      href: 'http://192.241.174.137:8080',
-      external: true,
-    })
-  }
-
   // Rankings
   const rankings = modules?.rankings
   if (rankings && typeof rankings === 'object' && rankings.enabled) {
@@ -102,6 +95,15 @@ export function useTopNavLinks(): TopNavLink[] {
     } else {
       links.push({ title: t('Docs'), href: '/docs' })
     }
+  }
+
+  // Custom page/link
+  const customPage = modules?.customPage
+  if (customPage && typeof customPage === 'object' && customPage.enabled) {
+    const title = customPage.title.trim() || t('Custom Page')
+    const url = customPage.url.trim()
+    const href = customPage.useHtml || !url ? '/custom-page' : url
+    links.push({ title, href, external: isExternalHref(href) })
   }
 
   // About
