@@ -110,6 +110,7 @@ const TopUp = () => {
   const [topupInfo, setTopupInfo] = useState({
     amount_options: [],
     discount: {},
+    topup_group_ratio: 1,
     enable_redemption: true,
     payment_compliance_confirmed: true,
   });
@@ -580,6 +581,7 @@ const TopUp = () => {
         setTopupInfo({
           amount_options: data.amount_options || [],
           discount: data.discount || {},
+          topup_group_ratio: data.topup_group_ratio || 1,
         });
 
         // 处理支付方式
@@ -858,14 +860,10 @@ const TopUp = () => {
   };
 
   // 选择预设充值额度
-  const selectPresetAmount = (preset) => {
+  const selectPresetAmount = async (preset) => {
     setTopUpCount(preset.value);
     setSelectedPreset(preset.value);
-
-    // 计算实际支付金额，考虑折扣
-    const discount = preset.discount || topupInfo.discount[preset.value] || 1.0;
-    const discountedAmount = preset.value * priceRatio * discount;
-    setAmount(discountedAmount);
+    await requestAmountByPayment(payWay, preset.value);
   };
 
   // 格式化大数字显示

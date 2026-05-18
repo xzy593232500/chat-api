@@ -93,7 +93,9 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.GET("/topup/info", controller.GetTopUpInfo)
 				selfRoute.GET("/topup/self", controller.GetUserTopUps)
 				selfRoute.GET("/invoice", controller.GetUserInvoices)
+				selfRoute.GET("/invoice/:id/download", controller.DownloadUserTopUpInvoice)
 				selfRoute.POST("/invoice", middleware.CriticalRateLimit(), controller.CreateTopUpInvoice)
+				selfRoute.DELETE("/invoice/:id", controller.WithdrawTopUpInvoice)
 				selfRoute.POST("/topup", middleware.CriticalRateLimit(), controller.TopUp)
 				selfRoute.POST("/pay", middleware.CriticalRateLimit(), controller.RequestEpay)
 				selfRoute.POST("/amount", controller.RequestAmount)
@@ -144,6 +146,15 @@ func SetApiRouter(router *gin.Engine) {
 				adminRoute.GET("/2fa/stats", controller.Admin2FAStats)
 				adminRoute.DELETE("/:id/2fa", controller.AdminDisable2FA)
 			}
+		}
+
+		invoiceAdminRoute := apiRouter.Group("/invoice")
+		invoiceAdminRoute.Use(middleware.AdminAuth())
+		{
+			invoiceAdminRoute.GET("", controller.GetAllInvoices)
+			invoiceAdminRoute.POST("/:id/reject", controller.AdminRejectInvoice)
+			invoiceAdminRoute.POST("/:id/file", controller.AdminUploadInvoiceFile)
+			invoiceAdminRoute.GET("/:id/download", controller.AdminDownloadInvoice)
 		}
 
 		// Subscription billing (plans, purchase, admin management)

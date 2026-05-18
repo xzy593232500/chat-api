@@ -94,6 +94,11 @@ func GetTopUpInfo(c *gin.Context) {
 		}
 	}
 
+	topupGroupRatio := common.GetTopupGroupRatio(c.GetString("group"))
+	if topupGroupRatio == 0 {
+		topupGroupRatio = 1
+	}
+
 	data := gin.H{
 		"enable_online_topup":              isEpayTopUpEnabled(),
 		"enable_stripe_topup":              isStripeTopUpEnabled(),
@@ -117,6 +122,7 @@ func GetTopUpInfo(c *gin.Context) {
 		"waffo_pancake_min_topup": setting.WaffoPancakeMinTopUp,
 		"amount_options":          operation_setting.GetPaymentSetting().AmountOptions,
 		"discount":                operation_setting.GetPaymentSetting().AmountDiscount,
+		"topup_group_ratio":       topupGroupRatio,
 		"topup_link":              common.TopUpLink,
 	}
 	common.ApiSuccess(c, data)

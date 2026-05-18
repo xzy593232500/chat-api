@@ -19,6 +19,7 @@ import { API, copy, timestamp2string } from '../../helpers';
 
 const { Text } = Typography;
 const MIN_INVOICE_AMOUNT = 500;
+const DEFAULT_INVOICE_CONTENT = '“信息技术服务”技术服务费';
 
 const labels = {
   title: '\u5145\u503c\u8d26\u5355',
@@ -50,7 +51,7 @@ const labels = {
   remark: '\u5f00\u7968\u5907\u6ce8',
   companyPlaceholder: '\u8bf7\u8f93\u5165\u5355\u4f4d\u5168\u79f0',
   taxNoPlaceholder: '\u8bf7\u8f93\u516518\u4f4d\u7edf\u4e00\u793e\u4f1a\u4fe1\u7528\u4ee3\u7801',
-  contentPlaceholder: '*\u4fe1\u606f\u6280\u672f\u670d\u52a1*\u6280\u672f\u670d\u52a1\u8d39',
+  contentPlaceholder: DEFAULT_INVOICE_CONTENT,
   remarkPlaceholder: '\u8bf7\u7b80\u8981\u8bf4\u660e\u7528\u9014',
   note: '\u7531\u4e8e\u6c47\u7387\u6ce2\u52a8\uff0c\u8d26\u5355\u91d1\u989d\u53ef\u80fd\u4e0e\u5b9e\u9645\u652f\u4ed8\u91d1\u989d\u5b58\u5728\u7ec6\u5fae\u5dee\u5f02\u3002\u5982\u6709\u5dee\u5f02\uff0c\u8bf7\u6839\u636e\u5b9e\u9645\u652f\u4ed8\u51ed\u8bc1\u4fee\u6539\u5f00\u7968\u91d1\u989d\u3002',
   minTip: '\u6700\u4f4e\u5f00\u7968\u91d1\u989d\u4e3a 500 \u5143\uff0c\u5f53\u524d\u5df2\u9009\u91d1\u989d\u4e0d\u8db3',
@@ -58,6 +59,7 @@ const labels = {
   submit: '\u63d0\u4ea4\u7533\u8bf7',
   submitSuccess: '\u53d1\u7968\u7533\u8bf7\u5df2\u63d0\u4ea4',
   noBills: '\u6682\u65e0\u5145\u503c\u8bb0\u5f55',
+  noInvoiceableBills: '暂无可开票账单',
 };
 
 const paymentLabels = {
@@ -111,7 +113,7 @@ function TopUpBills() {
   const [form, setForm] = useState({
     company_name: '',
     tax_no: '',
-    content: labels.contentPlaceholder,
+    content: DEFAULT_INVOICE_CONTENT,
     remark: '',
   });
 
@@ -180,8 +182,7 @@ function TopUpBills() {
     selectedIds.length > 0 &&
     selectedAmount >= MIN_INVOICE_AMOUNT &&
     form.company_name.trim() &&
-    form.tax_no.trim() &&
-    form.content.trim();
+    form.tax_no.trim();
 
   const openInvoiceModal = () => {
     setSelectedIds([]);
@@ -204,6 +205,7 @@ function TopUpBills() {
       const res = await API.post('/api/user/invoice', {
         topup_ids: selectedIds,
         ...form,
+        content: DEFAULT_INVOICE_CONTENT,
       });
       if (res.data?.success) {
         Toast.success(labels.submitSuccess);
@@ -346,12 +348,12 @@ function TopUpBills() {
                   loadInvoiceableTopups(nextPage);
                 },
               }}
-              empty={<Empty description='\u6682\u65e0\u53ef\u5f00\u7968\u8d26\u5355' />}
+              empty={<Empty description={labels.noInvoiceableBills} />}
             />
           </div>
           <div className='flex items-center justify-between rounded-lg border border-semi-color-border bg-semi-color-fill-0 px-4 py-4'>
             <span>{labels.selectedCount}: {selectedIds.length} {labels.records}</span>
-            <span className='text-2xl font-semibold'>{labels.invoiceAmount}: <Text type='danger' strong className='!text-2xl'>{money(selectedAmount)}</Text></span>
+            <span className='text-sm text-semi-color-text-0'>{labels.invoiceAmount}: <Text type='danger' strong className='!text-2xl'>{money(selectedAmount)}</Text></span>
           </div>
           <Text type='tertiary' size='small'>{labels.note}</Text>
           <div className='border-t border-semi-color-border pt-4'>
@@ -359,11 +361,11 @@ function TopUpBills() {
             <Form layout='vertical'>
               <Form.Input field='company_name' label={<>{labels.company}<Text type='danger'> *</Text></>} placeholder={labels.companyPlaceholder} value={form.company_name} onChange={(value) => setForm((prev) => ({ ...prev, company_name: value }))} />
               <Form.Input field='tax_no' label={<>{labels.taxNo}<Text type='danger'> *</Text></>} placeholder={labels.taxNoPlaceholder} value={form.tax_no} onChange={(value) => setForm((prev) => ({ ...prev, tax_no: value }))} />
-              <Form.Input field='content' label={labels.content} placeholder={labels.contentPlaceholder} value={form.content} onChange={(value) => setForm((prev) => ({ ...prev, content: value }))} />
+              <Form.Input field='content' label={labels.content} placeholder={labels.contentPlaceholder} value={DEFAULT_INVOICE_CONTENT} disabled />
               <Form.TextArea field='remark' label={labels.remark} placeholder={labels.remarkPlaceholder} maxCount={100} autosize={{ minRows: 3, maxRows: 4 }} value={form.remark} onChange={(value) => setForm((prev) => ({ ...prev, remark: value }))} />
             </Form>
           </div>
-          <div className='flex items-center justify-between gap-3 border-t border-semi-color-border pt-5 pb-3'>
+          <div className='flex items-center justify-between gap-3 border-t border-semi-color-border pt-5 pb-5'>
             <Text type='tertiary'>{selectedAmount < MIN_INVOICE_AMOUNT ? labels.minTip : ''}</Text>
             <div className='flex items-center gap-2'>
               <Button onClick={() => setInvoiceOpen(false)}>{labels.cancel}</Button>

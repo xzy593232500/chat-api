@@ -430,7 +430,10 @@ const RechargeCard = ({
                         preset.discount ||
                         topupInfo?.discount?.[preset.value] ||
                         1.0;
-                      const originalPrice = preset.value * priceRatio;
+                      const topupGroupRatio =
+                        Number(topupInfo?.topup_group_ratio) || 1;
+                      const originalPrice =
+                        preset.value * priceRatio * topupGroupRatio;
                       const discountedPrice = originalPrice * discount;
                       const hasDiscount = discount < 1.0;
                       const actualPay = discountedPrice;

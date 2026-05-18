@@ -38,6 +38,7 @@ const routerMap = {
   topup: '/console/topup',
   topupBills: '/console/topup-bills',
   invoices: '/console/invoices',
+  invoiceStats: '/console/admin/invoices',
   user: '/console/user',
   subscription: '/console/subscription',
   log: '/console/log',
@@ -193,6 +194,12 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('用户管理'),
         itemKey: 'user',
         to: '/user',
+        className: isAdmin() ? '' : 'tableHiddle',
+      },
+      {
+        text: t('发票统计'),
+        itemKey: 'invoiceStats',
+        to: '/console/admin/invoices',
         className: isAdmin() ? '' : 'tableHiddle',
       },
       {

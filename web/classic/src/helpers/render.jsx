@@ -142,6 +142,7 @@ export function getLucideIcon(key, selected = false) {
     case 'topupBills':
       return <ReceiptText {...commonProps} color={iconColor} />;
     case 'invoices':
+    case 'invoiceStats':
       return <FileText {...commonProps} color={iconColor} />;
     case 'channel':
       return <Layers {...commonProps} color={iconColor} />;

@@ -1,46 +1,52 @@
-﻿import React, { useEffect, useState } from 'react';
-import { Badge, Button, Empty, Table, Toast, Typography } from '@douyinfe/semi-ui';
-import { IconRefresh } from '@douyinfe/semi-icons';
+import React, { useEffect, useState } from 'react';
+import { Button, Empty, Modal, Table, Toast, Tooltip, Typography } from '@douyinfe/semi-ui';
+import { IconDownload, IconRefresh } from '@douyinfe/semi-icons';
 import { FileText } from 'lucide-react';
 import { API, timestamp2string } from '../../helpers';
 
 const { Text } = Typography;
 
 const labels = {
-  title: '\u53d1\u7968\u7ba1\u7406',
-  refresh: '\u5237\u65b0',
-  amount: '\u5f00\u7968\u91d1\u989d',
-  company: '\u5355\u4f4d\u540d\u79f0',
-  taxNo: '\u7a0e\u53f7',
-  status: '\u72b6\u6001',
-  createdAt: '\u7533\u8bf7\u65f6\u95f4',
-  action: '\u64cd\u4f5c',
-  pending: '\u5f85\u5904\u7406',
-  approved: '\u5df2\u5f00\u7968',
-  rejected: '\u5df2\u9a73\u56de',
-  noData: '\u6682\u65e0\u53d1\u7968\u7533\u8bf7',
-  loadFail: '\u52a0\u8f7d\u53d1\u7968\u7533\u8bf7\u5931\u8d25',
+  title: '发票管理',
+  refresh: '刷新',
+  amount: '开票金额',
+  company: '单位名称',
+  taxNo: '税号',
+  content: '发票内容',
+  status: '状态',
+  createdAt: '申请时间',
+  action: '操作',
+  file: '发票文件',
+  rejectReason: '驳回原因',
+  pending: '待开票',
+  issued: '已开票',
+  rejected: '已驳回',
+  withdrawn: '已撤回',
+  noData: '暂无发票申请',
+  loadFail: '加载发票申请失败',
+  withdraw: '撤回',
+  withdrawTitle: '撤回发票申请',
+  withdrawContent: '确定要撤回这条发票申请吗？',
+  withdrawSuccess: '发票申请已撤回',
+  download: '下载发票',
 };
 
 const statusConfig = {
-  pending: { text: labels.pending, type: 'warning' },
-  approved: { text: labels.approved, type: 'success' },
-  rejected: { text: labels.rejected, type: 'danger' },
+  pending: { text: labels.pending, color: '#d97706' },
+  issued: { text: labels.issued, color: '#16a34a' },
+  approved: { text: labels.issued, color: '#16a34a' },
+  rejected: { text: labels.rejected, color: '#dc2626' },
+  withdrawn: { text: labels.withdrawn, color: '#dc2626' },
 };
 
 function money(value) {
   const n = Number(value || 0);
-  return `\u00a5${n.toFixed(2)}`;
+  return `¥${n.toFixed(2)}`;
 }
 
-function statusBadge(status) {
-  const config = statusConfig[status] || { text: status || '-', type: 'primary' };
-  return (
-    <span className='inline-flex items-center gap-2'>
-      <Badge dot type={config.type} />
-      <span>{config.text}</span>
-    </span>
-  );
+function statusText(status) {
+  const config = statusConfig[status] || { text: status || '-', color: 'var(--semi-color-text-2)' };
+  return <span style={{ color: config.color, fontWeight: 600 }}>{config.text}</span>;
 }
 
 function InvoiceManagement() {
@@ -72,13 +78,66 @@ function InvoiceManagement() {
     loadInvoices();
   }, [page, pageSize]);
 
+  const downloadInvoice = (record) => {
+    window.open(`/api/user/invoice/${record.id}/download`, '_blank');
+  };
+
+  const withdrawInvoice = (record) => {
+    Modal.confirm({
+      title: labels.withdrawTitle,
+      content: labels.withdrawContent,
+      centered: true,
+      onOk: async () => {
+        const res = await API.delete(`/api/user/invoice/${record.id}`);
+        if (res.data?.success) {
+          Toast.success(labels.withdrawSuccess);
+          loadInvoices();
+        } else {
+          Toast.error(res.data?.message || '撤回失败');
+        }
+      },
+    });
+  };
+
   const columns = [
     { title: labels.amount, dataIndex: 'amount', render: (value) => <Text type='danger'>{money(value)}</Text> },
     { title: labels.company, dataIndex: 'company_name' },
     { title: labels.taxNo, dataIndex: 'tax_no' },
-    { title: labels.status, dataIndex: 'status', render: statusBadge },
+    { title: labels.content, dataIndex: 'content' },
+    { title: labels.status, dataIndex: 'status', render: statusText },
     { title: labels.createdAt, dataIndex: 'create_time', render: timestamp2string },
-    { title: labels.action, render: () => <Text type='tertiary'>-</Text> },
+    {
+      title: labels.file,
+      dataIndex: 'invoice_file_name',
+      render: (value, record) =>
+        value && (record.status === 'issued' || record.status === 'approved') ? (
+          <Button size='small' icon={<IconDownload />} theme='light' onClick={() => downloadInvoice(record)}>
+            {labels.download}
+          </Button>
+        ) : (
+          <Text type='tertiary'>-</Text>
+        ),
+    },
+    {
+      title: labels.action,
+      render: (_, record) => {
+        if (record.status === 'pending') {
+          return (
+            <Button size='small' type='danger' theme='borderless' onClick={() => withdrawInvoice(record)}>
+              {labels.withdraw}
+            </Button>
+          );
+        }
+        if (record.status === 'rejected' && record.reject_reason) {
+          return (
+            <Tooltip content={record.reject_reason}>
+              <Text type='danger'>{labels.rejectReason}</Text>
+            </Tooltip>
+          );
+        }
+        return <Text type='tertiary'>-</Text>;
+      },
+    },
   ];
 
   return (

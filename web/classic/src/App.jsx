@@ -37,6 +37,7 @@ import Redemption from './pages/Redemption';
 import TopUp from './pages/TopUp';
 import TopUpBills from './pages/TopUpBills';
 import InvoiceManagement from './pages/InvoiceManagement';
+import AdminInvoices from './pages/AdminInvoices';
 import Log from './pages/Log';
 import Chat from './pages/Chat';
 import Chat2Link from './pages/Chat2Link';
@@ -171,6 +172,14 @@ function App() {
           element={
             <AdminRoute>
               <User />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path='/console/admin/invoices'
+          element={
+            <AdminRoute>
+              <AdminInvoices />
             </AdminRoute>
           }
         />
