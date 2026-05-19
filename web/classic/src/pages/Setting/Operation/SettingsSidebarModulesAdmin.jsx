@@ -56,6 +56,8 @@ export default function SettingsSidebarModulesAdmin(props) {
     personal: {
       enabled: true,
       topup: true,
+      topupBills: true,
+      invoices: true,
       personal: true,
     },
     admin: {
@@ -118,6 +120,8 @@ export default function SettingsSidebarModulesAdmin(props) {
       personal: {
         enabled: true,
         topup: true,
+        topupBills: true,
+        invoices: true,
         personal: true,
       },
       admin: {
@@ -176,7 +180,17 @@ export default function SettingsSidebarModulesAdmin(props) {
     if (props.options && props.options.SidebarModulesAdmin) {
       try {
         const modules = JSON.parse(props.options.SidebarModulesAdmin);
-        setSidebarModulesAdmin(modules);
+        setSidebarModulesAdmin({
+          ...modules,
+          personal: {
+            enabled: true,
+            topup: true,
+            topupBills: true,
+            invoices: true,
+            personal: true,
+            ...(modules.personal || {}),
+          },
+        });
       } catch (error) {
         // 使用默认配置
         const defaultModules = {
@@ -189,7 +203,13 @@ export default function SettingsSidebarModulesAdmin(props) {
             midjourney: true,
             task: true,
           },
-          personal: { enabled: true, topup: true, personal: true },
+          personal: {
+            enabled: true,
+            topup: true,
+            topupBills: true,
+            invoices: true,
+            personal: true,
+          },
           admin: {
             enabled: true,
             channel: true,
@@ -244,6 +264,16 @@ export default function SettingsSidebarModulesAdmin(props) {
       description: t('用户个人功能'),
       modules: [
         { key: 'topup', title: t('钱包管理'), description: t('余额充值管理') },
+        {
+          key: 'topupBills',
+          title: t('\u5145\u503c\u8d26\u5355'),
+          description: t('\u5145\u503c\u8bb0\u5f55\u4e0e\u53d1\u7968\u7533\u8bf7'),
+        },
+        {
+          key: 'invoices',
+          title: t('\u53d1\u7968\u7ba1\u7406'),
+          description: t('\u67e5\u770b\u4e0e\u4e0b\u8f7d\u53d1\u7968'),
+        },
         {
           key: 'personal',
           title: t('个人设置'),

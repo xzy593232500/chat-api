@@ -13,6 +13,7 @@ const labels = {
   company: '单位名称',
   taxNo: '税号',
   content: '发票内容',
+  remark: '\u5f00\u7968\u5907\u6ce8',
   status: '状态',
   createdAt: '申请时间',
   action: '操作',
@@ -47,6 +48,19 @@ function money(value) {
 function statusText(status) {
   const config = statusConfig[status] || { text: status || '-', color: 'var(--semi-color-text-2)' };
   return <span style={{ color: config.color, fontWeight: 600 }}>{config.text}</span>;
+}
+
+function renderRemark(value) {
+  const text = String(value || '').trim();
+  if (!text) {
+    return <Text type='tertiary'>-</Text>;
+  }
+  const shortText = text.length > 18 ? `${text.slice(0, 18)}...` : text;
+  return (
+    <Tooltip content={text}>
+      <Text>{shortText}</Text>
+    </Tooltip>
+  );
 }
 
 const DOWNLOAD_FAIL_TEXT = '\u4e0b\u8f7d\u5931\u8d25';
@@ -161,6 +175,7 @@ function InvoiceManagement() {
     { title: labels.company, dataIndex: 'company_name' },
     { title: labels.taxNo, dataIndex: 'tax_no' },
     { title: labels.content, dataIndex: 'content' },
+    { title: labels.remark, dataIndex: 'remark', render: renderRemark },
     { title: labels.status, dataIndex: 'status', render: statusText },
     { title: labels.createdAt, dataIndex: 'create_time', render: timestamp2string },
     {
