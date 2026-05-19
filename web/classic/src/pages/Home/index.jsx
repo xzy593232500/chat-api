@@ -17,7 +17,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import React, { useContext, useEffect, useState } from 'react';
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+} from 'react';
 import {
   Button,
   Typography,
@@ -69,6 +75,7 @@ const Home = () => {
   const { t, i18n } = useTranslation();
   const [statusState] = useContext(StatusContext);
   const actualTheme = useActualTheme();
+  const homePageIframeRef = useRef(null);
   const [homePageContentLoaded, setHomePageContentLoaded] = useState(false);
   const [homePageContent, setHomePageContent] = useState('');
   const [noticeVisible, setNoticeVisible] = useState(false);
@@ -80,6 +87,48 @@ const Home = () => {
   const endpointItems = API_ENDPOINTS.map((e) => ({ value: e }));
   const [endpointIndex, setEndpointIndex] = useState(0);
   const isChinese = i18n.language.startsWith('zh');
+  const isHomePageIframe = homePageContent.startsWith('https://');
+
+  const syncHomePageIframeTheme = useCallback(() => {
+    const iframe = homePageIframeRef.current;
+    if (!iframe?.contentWindow) return;
+
+    const isDark = actualTheme === 'dark';
+
+    try {
+      const iframeDocument = iframe.contentDocument;
+      if (iframeDocument) {
+        iframeDocument.documentElement.classList.toggle('dark', isDark);
+        iframeDocument.documentElement.dataset.theme = actualTheme;
+        iframeDocument.documentElement.dataset.themeMode = actualTheme;
+        iframeDocument.documentElement.style.colorScheme = actualTheme;
+        if (iframeDocument.body) {
+          if (isDark) {
+            iframeDocument.body.setAttribute('theme-mode', 'dark');
+          } else {
+            iframeDocument.body.removeAttribute('theme-mode');
+          }
+        }
+      }
+      iframe.contentWindow.localStorage?.setItem('theme-mode', actualTheme);
+    } catch (error) {
+      // Cross-origin pages can only receive the theme through postMessage.
+    }
+
+    iframe.contentWindow.postMessage(
+      {
+        type: 'new-api-theme',
+        theme: actualTheme,
+        themeMode: actualTheme,
+        mode: actualTheme,
+        dark: isDark,
+        isDark,
+      },
+      '*',
+    );
+    iframe.contentWindow.postMessage({ themeMode: actualTheme }, '*');
+    iframe.contentWindow.postMessage({ lang: i18n.language }, '*');
+  }, [actualTheme, i18n.language]);
 
   const displayHomePageContent = async () => {
     setHomePageContent(localStorage.getItem('home_page_content') || '');
@@ -92,17 +141,6 @@ const Home = () => {
       }
       setHomePageContent(content);
       localStorage.setItem('home_page_content', content);
-
-      // 如果内容是 URL，则发送主题模式
-      if (data.startsWith('https://')) {
-        const iframe = document.querySelector('iframe');
-        if (iframe) {
-          iframe.onload = () => {
-            iframe.contentWindow.postMessage({ themeMode: actualTheme }, '*');
-            iframe.contentWindow.postMessage({ lang: i18n.language }, '*');
-          };
-        }
-      }
     } else {
       showError(message);
       setHomePageContent('加载首页内容失败...');
@@ -140,6 +178,15 @@ const Home = () => {
   useEffect(() => {
     displayHomePageContent().then();
   }, []);
+
+  useEffect(() => {
+    if (!isHomePageIframe) return undefined;
+
+    const timers = [0, 150, 500, 1000].map((delay) =>
+      window.setTimeout(syncHomePageIframeTheme, delay),
+    );
+    return () => timers.forEach((timer) => window.clearTimeout(timer));
+  }, [isHomePageIframe, homePageContent, syncHomePageIframeTheme]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -338,12 +385,17 @@ const Home = () => {
         <div className='overflow-x-hidden w-full'>
           {homePageContent.startsWith('https://') ? (
             <iframe
+              ref={homePageIframeRef}
               src={homePageContent}
+              title={t('首页内容')}
               className='w-full h-screen border-none'
+              onLoad={syncHomePageIframeTheme}
             />
           ) : (
             <div
-              className='mt-[60px]'
+              className='mt-[60px] min-h-screen bg-semi-color-bg-0 text-semi-color-text-0'
+              data-theme={actualTheme}
+              data-theme-mode={actualTheme}
               dangerouslySetInnerHTML={{ __html: homePageContent }}
             />
           )}
